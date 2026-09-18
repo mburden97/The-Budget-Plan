@@ -20,7 +20,11 @@ if errorlevel 1 (
     copy /y "%~dp0pyproject.toml" "%STAMP%" >nul
 )
 
-"%VENV%\Scripts\python.exe" -m budgetapp %*
+rem A file named DEV_MODE next to this launcher (git-ignored, so only on this machine)
+rem starts dev mode: the passphrase-less data-dev vault. Delete it to run normally.
+set "DEVFLAG="
+if exist "%~dp0DEV_MODE" set "DEVFLAG=--dev"
+"%VENV%\Scripts\python.exe" -m budgetapp %DEVFLAG% %*
 exit /b %errorlevel%
 
 :fail

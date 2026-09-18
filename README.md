@@ -81,7 +81,9 @@ once; **rules** (description contains X) win over bank categories.
 **Dev mode:** double-click `Dev.cmd` (or run `python -m budgetapp --dev`) to work on the app
 without a passphrase. It uses a separate `data-dev/` vault on port 8767, created with the
 starter budget lines on first run, and opens straight to the dashboard. That vault is not
-protected, so use made-up data only; your real vault in `data/` is untouched.
+protected, so use made-up data only; your real vault in `data/` is untouched. To make
+`Budget.cmd` itself start in dev mode on your machine, create an empty file named `DEV_MODE`
+next to it (it's git-ignored); delete the file to go back.
 
 ```bash
 python -m pytest          # tests
