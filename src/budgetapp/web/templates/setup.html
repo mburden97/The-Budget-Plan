@@ -3,8 +3,9 @@
 {% block content %}
 <section class="panel narrow">
   <h1>Create your vault</h1>
-  <p>Your budget is stored in one encrypted file. A passphrase is the only way to open it.
-    <strong>There is no reset or recovery</strong>, so store it in your password manager.</p>
+  <p>Your budget is stored in one encrypted file, opened with a passphrase. <strong>There is no
+    reset</strong>: store the passphrase in your password manager, and once you're in, create a
+    recovery code in Settings as a backup way in.</p>
   <form method="post" action="{{ url_for('auth.setup_post') }}" class="stack">
     {{ csrf_field() }}
     <label>Passphrase
@@ -16,6 +17,9 @@
     <p class="hint">At least {{ min_length }} characters. Four or five random words is a good choice.
       {% if allow_blank %}<br><strong>For now you can leave both blank</strong>: the app will open
       without asking, and you can add a passphrase later in Settings.{% endif %}</p>
+    <label class="check"><input type="checkbox" name="starter_lines" value="1" checked>
+      Start with common budget lines (Rent, Groceries, Phone and so on, all at $0). Rename, change or
+      delete them any time on Budget &rarr; Plan.</label>
     <button type="submit">Create vault</button>
   </form>
 </section>

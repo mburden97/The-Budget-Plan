@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}New budget line · Transactions · Budget{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('transactions.index', month=month_q or none, show=show) }}">&larr; Transactions</a>
+<h1>New budget line</h1>
+<p class="muted">For <strong>{{ txn.description }}</strong> on {{ txn.posted_on }},
+  <span class="{{ 'good' if txn.amount_cents > 0 }}">{{ txn.amount_cents|money }}</span>.
+  The line is added to your plan and this transaction is filed under it.</p>
+
+<section class="panel">
+  <form method="post" action="{{ url_for('transactions.create_line', txn_id=txn.id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="month" value="{{ month_q }}">
+    {% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+    <label>Line name <input name="name" value="{{ suggested_name }}" maxlength="100" required autofocus
+      placeholder="e.g. Groceries"></label>
+    <label>Category
+      <select name="category_id">
+        {% for c in categories %}
+        <option value="{{ c.id }}" {{ 'selected' if c.id == default_category }}>{{ c.name }} ({{ kinds[c.kind] }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>or a new category <input name="new_category" maxlength="60" placeholder="leave blank to use the one above"></label>
+    <label>New category type
+      <select name="kind">
+        {% for key, label in kinds.items() %}<option value="{{ key }}" {{ 'selected' if key == wanted_kind }}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Planned amount <input name="amount" inputmode="decimal" placeholder="0.00"></label>
+    <label>How often
+      <select name="frequency">
+        {% for key, (label, _per_year) in frequencies.items() %}<option value="{{ key }}" {{ 'selected' if key == 'monthly' }}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="check wide"><input type="checkbox" name="remember" value="1" {{ 'checked' if pattern }}>
+      Always file transactions containing
+      <input name="pattern" value="{{ pattern }}" maxlength="100" class="pattern" aria-label="Rule text"> here</label>
+    <div class="form-actions wide">
+      <button type="submit">Add line and file this transaction</button>
+    </div>
+  </form>
+  <p class="hint">The planned amount can stay blank for now; set it any time on
+    <a href="{{ url_for('budget.index') }}">Budget &rarr; Plan</a>, where you can also rename, move or
+    delete lines and categories.</p>
+</section>
+{% endblock %}

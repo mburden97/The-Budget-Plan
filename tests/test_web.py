@@ -1181,3 +1181,78 @@ def test_interest_saved_is_not_measured_against_a_plan_that_misses_a_promo(unloc
     page = unlocked_client.get("/loans/").data
     assert page.count(b"Leaves a balance on Store card") == 1  # the current plan only
     assert page.count(b"n/a: current payments miss the promo") == 2  # avalanche, snowball
+
+
+def _one_transaction(store, description="CORNER GROCER 118", cents=-4210):
+    with store.write() as conn:
+        return transactions.add_transaction(
+            conn, posted_on=date(2026, 9, 3), description=description, amount_cents=cents
+        )
+
+
+def test_new_budget_line_from_the_categorize_dropdown(unlocked_client, store):
+    token = csrf(unlocked_client)
+    txn = _one_transaction(store)
+    page = unlocked_client.get("/transactions/?month=2026-09").data
+    assert b"any budget lines yet" in page and b"+ New budget line" in page
+
+    sent = unlocked_client.post(
+        f"/transactions/{txn}/categorize",
+        data={"csrf_token": token, "category": "new", "month": "2026-09"},
+    )
+    assert f"/transactions/{txn}/new-line" in sent.headers["Location"]
+    form = unlocked_client.get(sent.headers["Location"]).data
+    assert b'value="Corner Grocer"' in form  # suggested from the description
+
+    with store.read() as conn:
+        flexible = {c.name: c.id for c in planning.list_categories(conn)}["Flexible Expenses"]
+    done = unlocked_client.post(f"/transactions/{txn}/new-line", data={
+        "csrf_token": token, "name": "Groceries", "category_id": str(flexible), "amount": "400",
+        "frequency": "monthly", "remember": "1", "pattern": "CORNER GROCER", "month": "2026-09",
+    })
+    assert "month=2026-09" in done.headers["Location"]
+    with store.read() as conn:
+        filed = transactions.get_transaction(conn, txn)
+        [rule] = transactions.list_rules(conn)
+        [line] = [i for g in planning.grouped(conn) for i in g.items]
+    assert (filed.line_item_name, filed.category_name) == ("Groceries", "Flexible Expenses")
+    assert rule.pattern == "CORNER GROCER" and line.amount_cents == 40000
+    assert b"any budget lines yet" not in unlocked_client.get("/transactions/?month=2026-09").data
+
+
+def test_a_new_line_can_start_a_new_category_and_bad_input_goes_back(unlocked_client, store):
+    token = csrf(unlocked_client)
+    txn = _one_transaction(store, "PET CLINIC 22", -8500)
+    unlocked_client.post(f"/transactions/{txn}/new-line", data={
+        "csrf_token": token, "name": "Vet", "new_category": "Pets", "kind": "expense",
+        "month": "2026-09",
+    })
+    with store.read() as conn:
+        filed = transactions.get_transaction(conn, txn)
+        pets = [c for c in planning.list_categories(conn) if c.name == "Pets"]
+    assert (filed.line_item_name, filed.category_name) == ("Vet", "Pets")
+    assert [c.kind for c in pets] == ["expense"]
+
+    other = _one_transaction(store, "BOOK NOOK 5", -1999)
+    back = unlocked_client.post(f"/transactions/{other}/new-line", data={
+        "csrf_token": token, "name": "", "category_id": str(pets[0].id), "month": "2026-09",
+    })
+    assert f"/transactions/{other}/new-line" in back.headers["Location"]
+    with store.read() as conn:
+        assert transactions.get_transaction(conn, other).line_item_id is None
+        assert len([i for g in planning.grouped(conn) for i in g.items]) == 1
+    assert unlocked_client.get("/transactions/999999/new-line").status_code == 404
+
+
+def test_setup_can_start_with_common_budget_lines(client, store):
+    client.get("/setup")
+    client.post("/setup", data={
+        "passphrase": PASSPHRASE, "confirm": PASSPHRASE, "csrf_token": csrf(client),
+        "starter_lines": "1",
+    })
+    with store.read() as conn:
+        items = [i for g in planning.grouped(conn) for i in g.items]
+    assert {"Paycheck", "Rent / mortgage", "Groceries", "Subscriptions"} <= {i.name for i in items}
+    assert {i.amount_cents for i in items} == {0}
+    assert b"Groceries</option>" in client.get("/transactions/").data
+    assert b"any budget lines yet" not in client.get("/transactions/").data

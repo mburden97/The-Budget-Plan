@@ -12,6 +12,7 @@
     {% endfor %}
   </optgroup>
   {% endfor %}
+  {% if t %}<option value="new">+ New budget line…</option>{% endif %}
 </select>
 {% endmacro %}
 
@@ -41,6 +42,11 @@
   <a class="stat" href="{{ url_for('budget.actual', month=month_q) }}"><span class="label">Budget vs. actual</span><span class="value small">View &rarr;</span></a>
 </section>
 
+{% if not (groups|selectattr('items')|list) %}
+<div class="flash flash-info">You don't have any budget lines yet, so a transaction can only be left
+  uncategorized or marked as a transfer. Add lines on <a href="{{ url_for('budget.index') }}">Budget &rarr; Plan</a>,
+  or choose <strong>+ New budget line…</strong> in any row to make one as you go.</div>
+{% endif %}
 <section class="panel">
   <header class="panel-head">
     <h2>{{ 'Uncategorized' if show else 'All transactions' }} ({{ txns|length }})</h2>

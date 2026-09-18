@@ -20,6 +20,7 @@ MAX_CSV_BYTES = 5 * 1024 * 1024  # a year of bank rows, and nothing like a scann
 
 IMPORT_ACCOUNT_TYPES = ("cash", "credit_card", "other_asset", "other_liability")
 MAX_PENDING_IMPORTS = 3
+NEW_LINE = "new"  # the categorize dropdown's "+ New budget line…" choice
 
 
 @bp.get("/")
@@ -81,6 +82,10 @@ def add():
 @bp.post("/<int:txn_id>/categorize")
 def categorize(txn_id: int):
     form = request.form
+    if form.get("category") == NEW_LINE:  # "+ New budget line…": name it on its own page
+        return redirect(url_for(
+            "transactions.new_line", txn_id=txn_id, month=form.get("month"), show=form.get("show")
+        ))
     try:
         line_item_id, excluded = _category_choice(form.get("category", ""))
         pattern = form.get("pattern", "").strip() if forms.checkbox(form, "remember") else None
@@ -95,6 +100,73 @@ def categorize(txn_id: int):
         flash(str(exc), "error")
     except LookupError:
         abort(404)
+    return _back(form)
+
+
+@bp.get("/<int:txn_id>/new-line")
+def new_line(txn_id: int):
+    """Make a budget line for a transaction that doesn't fit any, and file it there."""
+    with current_store().read() as conn:
+        try:
+            txn = transactions.get_transaction(conn, txn_id)
+        except LookupError:
+            abort(404)
+        categories = planning.list_categories(conn)
+    pattern = transactions.suggest_pattern(txn.description)
+    wanted = "income" if txn.amount_cents > 0 else "expense"
+    default = next(
+        (c for c in categories if c.kind == wanted and "flexible" in c.name.lower()),
+        next((c for c in categories if c.kind == wanted), categories[0] if categories else None),
+    )
+    return render_template(
+        "new_line.html",
+        txn=txn,
+        categories=categories,
+        default_category=default.id if default else None,
+        kinds=planning.KINDS,
+        wanted_kind=wanted,
+        suggested_name=pattern.title() if pattern else "",
+        pattern=pattern,
+        frequencies=planning.FREQUENCIES,
+        month_q=request.args.get("month", ""),
+        show=request.args.get("show") or None,
+    )
+
+
+@bp.post("/<int:txn_id>/new-line")
+def create_line(txn_id: int):
+    form = request.form
+    try:
+        new_category = forms.text(form, "new_category", "New category", max_len=60)
+        amount = forms.money(form, "amount", "Planned amount", required=False) or 0
+        pattern = form.get("pattern", "").strip() if forms.checkbox(form, "remember") else None
+        with current_store().write() as conn:
+            transactions.get_transaction(conn, txn_id)
+            if new_category:
+                category_id = planning.add_category(
+                    conn, name=new_category, kind=form.get("kind", "expense")
+                )
+            else:
+                category_id = forms.integer(form, "category_id", "Category", required=True)
+            line_id = planning.add_line_item(
+                conn, category_id=category_id,
+                name=forms.text(form, "name", "Line name", required=True),
+                amount_cents=amount, frequency=form.get("frequency", "monthly"),
+            )
+            others = transactions.categorize(
+                conn, txn_id, line_item_id=line_id, remember_pattern=pattern
+            )
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for(
+            "transactions.new_line", txn_id=txn_id, month=form.get("month"), show=form.get("show")
+        ))
+    except LookupError:
+        abort(404)
+    message = "New budget line added, and this transaction filed under it."
+    if pattern:
+        message += f" The rule also filed {others} other transaction(s)."
+    flash(message, "info")
     return _back(form)
 
 

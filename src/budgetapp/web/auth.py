@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
+from budgetapp import planning
 from budgetapp.vault import BadPassphrase, BadRecoveryCode, NoRecoveryCode, VaultError
 from budgetapp.web import (
     ALLOW_BLANK_PASSPHRASE,
     blank_unlock,
     current_store,
+    forms,
     locked_page,
     start_session,
 )
@@ -49,9 +51,13 @@ def setup_post():
         flash(problem, "error")
         return redirect(url_for("auth.setup"))
     store.create(passphrase)
+    if forms.checkbox(request.form, "starter_lines"):
+        with store.write() as conn:
+            planning.add_starter_lines(conn)
     start_session(store)
     if passphrase:
-        flash("Vault created. Don't lose your passphrase: there is no recovery.", "info")
+        flash("Vault created. Keep your passphrase safe, and consider a recovery code in "
+              "Settings: without one or the other the vault can't be opened.", "info")
     else:
         flash("Vault created without a passphrase. Set one in Settings when you're ready.", "info")
     return redirect(url_for("dashboard.index"))

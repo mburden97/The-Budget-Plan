@@ -26,6 +26,24 @@ KINDS: dict[str, str] = {
     "debt": "Debt payment",
 }
 
+# Offered when a new vault is created, all at $0, so there is something to file
+# transactions under from day one. (category, line) pairs; categories are the seeded ones.
+STARTER_LINES: tuple[tuple[str, str], ...] = (
+    ("Income", "Paycheck"),
+    ("Fixed Expenses", "Rent / mortgage"),
+    ("Fixed Expenses", "Utilities"),
+    ("Fixed Expenses", "Phone"),
+    ("Fixed Expenses", "Internet"),
+    ("Fixed Expenses", "Insurance"),
+    ("Fixed Expenses", "Subscriptions"),
+    ("Flexible Expenses", "Groceries"),
+    ("Flexible Expenses", "Dining out"),
+    ("Flexible Expenses", "Fuel & transit"),
+    ("Flexible Expenses", "Entertainment"),
+    ("Flexible Expenses", "Shopping"),
+    ("Savings & Investing", "Emergency fund"),
+)
+
 MAX_NAME = 100
 MAX_NOTES = 500
 
@@ -230,6 +248,23 @@ def delete_line_item(conn: sqlite3.Connection, item_id: int) -> None:
 
 
 # ---------------------------------------------------------------- categories
+def add_starter_lines(conn: sqlite3.Connection) -> int:
+    """Add STARTER_LINES at $0 a month, skipping any a category already has. Returns how many."""
+    categories = {c.name: c.id for c in list_categories(conn)}
+    added = 0
+    for category_name, line_name in STARTER_LINES:
+        category_id = categories.get(category_name)
+        if category_id is None:
+            continue
+        exists = conn.execute(
+            "SELECT 1 FROM line_items WHERE category_id = ? AND name = ?", (category_id, line_name)
+        ).fetchone()
+        if not exists:
+            add_line_item(conn, category_id=category_id, name=line_name, amount_cents=0)
+            added += 1
+    return added
+
+
 def add_category(conn: sqlite3.Connection, *, name: str, kind: str) -> int:
     name = (name or "").strip()
     if not name:

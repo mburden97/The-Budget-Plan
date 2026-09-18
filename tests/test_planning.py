@@ -126,3 +126,8 @@ def test_categories(conn):
     conn.execute("DELETE FROM line_items")
     planning.delete_category(conn, new)
     assert "Irregular" not in _cats(conn)
+
+
+def test_starter_lines_are_added_once(conn):
+    assert planning.add_starter_lines(conn) == len(planning.STARTER_LINES)
+    assert planning.add_starter_lines(conn) == 0  # nothing twice
