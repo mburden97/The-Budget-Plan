@@ -27,8 +27,8 @@ only network access is an optional price refresh for investments (see
 Requires Python 3.12+ (`py --version`).
 
 **Windows:** double-click `Budget.cmd`. It keeps a Python environment in
-`%LOCALAPPDATA%\BudgetApp\venv` (outside OneDrive), reinstalls packages whenever
-`pyproject.toml` changes, and opens `http://127.0.0.1:8765`.
+`%LOCALAPPDATA%\TheBudgetPlan\venv` (outside OneDrive), reinstalls packages whenever
+`pyproject.toml` changes, and opens `http://127.0.0.1:8766`.
 
 **Manually / other OS:**
 

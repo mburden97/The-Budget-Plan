@@ -3,7 +3,7 @@ rem Double-click launcher. Keeps the virtual environment outside OneDrive so
 rem thousands of package files are not synced; only code + data/ live here.
 setlocal
 cd /d "%~dp0"
-set "VENV=%LOCALAPPDATA%\BudgetApp\venv"
+set "VENV=%LOCALAPPDATA%\TheBudgetPlan\venv"
 set "STAMP=%VENV%\pyproject.installed"
 
 if not exist "%VENV%\Scripts\python.exe" (

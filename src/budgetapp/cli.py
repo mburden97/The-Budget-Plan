@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(os.environ.get("BUDGET_DATA_DIR", "data")),
         help="folder holding budget.vault and backups/ (default: ./data or $BUDGET_DATA_DIR)",
     )
-    parser.add_argument("--port", type=int, default=8765, help="localhost port (default: 8765)")
+    parser.add_argument("--port", type=int, default=8766, help="localhost port (default: 8766)")
     parser.add_argument("--no-browser", action="store_true", help="don't open a browser tab")
     parser.add_argument(
         "--idle-minutes", type=int, default=15, help="auto-lock after inactivity (default: 15)"

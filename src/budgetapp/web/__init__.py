@@ -60,7 +60,9 @@ def create_app(store: Store, *, port: int) -> Flask:
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=secrets.token_bytes(32),  # per process: restarting invalidates sessions
-        SESSION_COOKIE_NAME="budget_session",
+        # Browsers share cookies across ports on one host, so each port gets its own name:
+        # two copies of the app side by side must not overwrite each other's session.
+        SESSION_COOKIE_NAME=f"budget_session_{port}",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
         # Documents are the big uploads; bank CSVs are held to MAX_CSV_BYTES separately.
