@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Use your recovery code · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Use your recovery code</h1>
+  {% if available %}
+  <p>Enter the recovery code you saved. You'll choose a new passphrase next.</p>
+  <form method="post" action="{{ url_for('auth.recover_post') }}" class="stack">
+    {{ csrf_field() }}
+    <label>Recovery code
+      <input name="code" required autofocus autocomplete="off" spellcheck="false" class="recovery-input"
+             placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+    </label>
+    <button type="submit">Open with recovery code</button>
+  </form>
+  <p class="hint">Dashes, spaces and capital letters don't matter.</p>
+  {% else %}
+  <p>This vault has no recovery code, so only its passphrase can open it.</p>
+  {% endif %}
+  <p class="hint"><a href="{{ url_for('auth.unlock') }}">&larr; Back to unlock</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Documents · Budget{% endblock %}
+{% from "_upload_form.html" import upload_form with context %}
+{% block content %}
+<header class="page-head">
+  <h1>Documents</h1>
+</header>
+<p class="hint spaced">Every financial document in one place: upload a newer version of anything here and
+  the date below moves with it. Files are encrypted one by one with their own key, which only this vault
+  holds, and kept in <code>{{ folder }}</code> &mdash; back that folder up alongside the vault.
+  Up to {{ max_mb }} MB each. Nothing here is read by the rest of the app, with one exception:
+  the newest version of a <strong>CSV, OFX or QFX</strong> file can be handed to
+  <a href="{{ url_for('transactions.import_form') }}">Transactions &rarr; Import</a> with the button
+  under it, which runs the usual column mapping and skips rows you already have.</p>
+
+<section class="summary">
+  <div class="stat"><span class="label">Documents</span><span class="value">{{ documents|length }}</span></div>
+  <div class="stat"><span class="label">Files kept</span>
+    <span class="value">{{ documents|map(attribute='versions')|map('length')|sum }}</span>
+    <span class="muted small">including older versions</span></div>
+  <div class="stat"><span class="label">Space used</span>
+    <span class="value">{{ used_label }}</span></div>
+  <div class="stat"><span class="label">Last updated</span>
+    <span class="value small">{% set newest = documents|selectattr('latest')|first %}{{ newest.latest.uploaded_at if newest else 'nothing yet' }}</span></div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2>Upload</h2>
+  </header>
+  {{ upload_form(documents, suggestions, url_for('documents.index')) }}
+</section>
+
+<section class="panel">
+  <h2>Everything on file</h2>
+  {% for d in documents %}
+  <article class="doc">
+    <header class="doc-head">
+      <h3>{{ d.name }}</h3>
+      {% if d.latest %}
+      <span class="pill-label">Last updated {{ d.latest.uploaded_at }}</span>
+      {% else %}
+      <span class="pill-label warn">Never uploaded</span>
+      {% endif %}
+    </header>
+    {% if d.notes %}<p class="muted small">{{ d.notes }}</p>{% endif %}
+    {% if d.latest %}
+    <p class="doc-file">
+      <a href="{{ url_for('documents.file', version_id=d.latest.id) }}">{{ d.latest.filename }}</a>
+      <span class="muted small">{{ d.latest.size_label }}</span>
+      <a class="small" href="{{ url_for('documents.file', version_id=d.latest.id, download=1) }}">Download</a>
+    </p>
+    {% if d.latest.importable %}
+    <form method="post" action="{{ url_for('documents.import_csv', version_id=d.latest.id) }}" class="inline csv-import">
+      {{ csrf_field() }}
+      {% if accounts %}
+      <label>Import these rows into
+        <select name="account_id">
+          {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="secondary">Import transactions</button>
+      {% else %}
+      <span class="muted small">Add a bank or card account on Net worth to import this file.</span>
+      {% endif %}
+    </form>
+    {% endif %}
+    {% endif %}
+    {% if d.older %}
+    <details class="older">
+      <summary>{{ d.older|length }} older version{{ '' if d.older|length == 1 else 's' }}</summary>
+      <table class="items">
+        <tbody>
+          {% for v in d.older %}
+          <tr>
+            <td>{{ v.uploaded_at }}</td>
+            <td><a href="{{ url_for('documents.file', version_id=v.id) }}">{{ v.filename }}</a></td>
+            <td class="num">{{ v.size_label }}</td>
+            <td class="num">
+              <form method="post" action="{{ url_for('documents.delete_version', version_id=v.id) }}" class="inline">
+                {{ csrf_field() }}
+                <button type="submit" class="link danger" data-confirm="Delete this version of {{ d.name }}?">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endif %}
+    <details class="doc-edit">
+      <summary>Rename, notes, delete</summary>
+      <form method="post" action="{{ url_for('documents.edit', document_id=d.id) }}" class="inline">
+        {{ csrf_field() }}
+        <label>Name <input name="name" value="{{ d.name }}" maxlength="80" required></label>
+        <label>Notes <input name="notes" value="{{ d.notes }}" maxlength="200" placeholder="renewal date, policy number reminder…"></label>
+        <button type="submit" class="secondary">Save</button>
+      </form>
+      <form method="post" action="{{ url_for('documents.delete', document_id=d.id) }}" class="inline">
+        {{ csrf_field() }}
+      <button type="submit" class="link danger"
+              data-confirm="Delete {{ d.name }} and all {{ d.versions|length }} of its files? This cannot be undone.">Delete document</button>
+      </form>
+    </details>
+  </article>
+  {% else %}
+  <p class="muted">Nothing uploaded yet. Start with whatever you would hate to go looking for:
+    your lease, an insurance policy, last year's tax return.</p>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Transactions · Budget{% endblock %}
+
+{% macro category_select(form_id, t=none) %}
+<select {% if form_id %}form="{{ form_id }}"{% endif %} name="category" aria-label="Category" {% if t %}data-autosubmit{% endif %}>
+  <option value="">Uncategorized</option>
+  <option value="x" {% if t and t.excluded %}selected{% endif %}>Not budgeted (transfer)</option>
+  {% for g in groups if g.items %}
+  <optgroup label="{{ g.category.name }}">
+    {% for i in g.items %}
+    <option value="{{ i.id }}" {% if t and t.line_item_id == i.id %}selected{% endif %}>{{ i.name }}</option>
+    {% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro back_fields(form_id=none) %}
+<input type="hidden" {% if form_id %}form="{{ form_id }}"{% endif %} name="month" value="{{ month_q }}">
+{% if show %}<input type="hidden" {% if form_id %}form="{{ form_id }}"{% endif %} name="show" value="{{ show }}">{% endif %}
+{% endmacro %}
+
+{% block content %}
+<header class="page-head">
+  <h1>Transactions</h1>
+  <nav class="month-nav">
+    <a href="{{ url_for('transactions.index', month=prev_q, show=show) }}" aria-label="Previous month">&larr;</a>
+    <strong>{{ month|month_label }}</strong>
+    <a href="{{ url_for('transactions.index', month=next_q, show=show) }}" aria-label="Next month">&rarr;</a>
+  </nav>
+  <a class="button push-right" href="{{ url_for('transactions.bank_categories') }}">Bank categories</a>
+  <a class="button primary" href="{{ url_for('transactions.import_form') }}">Import CSV</a>
+</header>
+
+<section class="summary">
+  <div class="stat"><span class="label">Money in</span><span class="value">{{ totals.inflow_cents|money }}</span></div>
+  <div class="stat"><span class="label">Money out</span><span class="value">{{ totals.outflow_cents|money }}</span></div>
+  <a class="stat {{ 'warn' if totals.uncategorized_count }}" href="{{ url_for('transactions.index', month=month_q, show='uncategorized') }}">
+    <span class="label">Uncategorized</span><span class="value">{{ totals.uncategorized_count }}</span>
+  </a>
+  <a class="stat" href="{{ url_for('budget.actual', month=month_q) }}"><span class="label">Budget vs. actual</span><span class="value small">View &rarr;</span></a>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2>{{ 'Uncategorized' if show else 'All transactions' }} ({{ txns|length }})</h2>
+    <a class="push-right" href="{{ url_for('transactions.index', month=month_q, show=none if show else 'uncategorized') }}">{{ 'Show all' if show else 'Show uncategorized only' }}</a>
+  </header>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Category</th><th>Rule</th><th></th></tr></thead>
+    <tbody>
+      {% for t in txns %}
+      {% set fid = "t-" ~ t.id %}
+      <tr>
+        <td class="nowrap">{{ t.posted_on }}</td>
+        <td>{{ t.description }}{% if t.account_name or t.bank_category %}<br><span class="muted small">{{ t.account_name or '' }}{% if t.account_name and t.bank_category %} · {% endif %}{{ t.bank_category or '' }}</span>{% endif %}{% for s in splits.get(t.id, []) %}<br><span class="small split-note">{{ s.amount_cents|money }} &rarr; {{ s.line_item_name }}{% if s.note %} · {{ s.note }}{% endif %}</span>{% endfor %}</td>
+        <td class="num {{ 'good' if t.amount_cents > 0 }}">{{ t.amount_cents|money }}</td>
+        <td>{{ category_select(fid, t) }}</td>
+        <td class="nowrap">
+          <span class="rule">
+            <label class="inline-check"><input form="{{ fid }}" type="checkbox" name="remember"> Always for</label>
+            <input form="{{ fid }}" name="pattern" value="{{ suggest(t.description) }}" maxlength="100" class="pattern" aria-label="Rule text">
+          </span>
+        </td>
+        <td class="actions">
+          <form id="{{ fid }}" method="post" action="{{ url_for('transactions.categorize', txn_id=t.id) }}">
+            {{ csrf_field() }}{{ back_fields() }}<button type="submit">Save</button>
+          </form>
+          <a class="row-link" href="{{ url_for('transactions.split', txn_id=t.id, month=month_q, show=show) }}">Split</a>
+          <form method="post" action="{{ url_for('transactions.delete', txn_id=t.id) }}" data-confirm="Delete this transaction?">
+            {{ csrf_field() }}{{ back_fields() }}<button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Nothing here for {{ month|month_label }}. Import a CSV from your bank or add one below.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<details class="adder">
+  <summary>Add a transaction</summary>
+  <div class="panel">
+  <form method="post" action="{{ url_for('transactions.add') }}" class="grid-form">
+    {{ csrf_field() }}{{ back_fields() }}
+    <label>Date <input type="date" name="posted_on" value="{{ today }}" required></label>
+    <label>Description <input name="description" required maxlength="200"></label>
+    <label>Amount <input name="amount" inputmode="decimal" required></label>
+    <label>Type
+      <select name="direction"><option value="out">Money out</option><option value="in">Money in</option></select>
+    </label>
+    <label>Account
+      <select name="account_id"><option value="">(none)</option>
+        {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Category {{ category_select(none) }}</label>
+    <button type="submit">Add</button>
+  </form>
+  </div>
+</details>
+
+<section class="panel">
+  <details>
+    <summary>Categorization rules ({{ rules|length }})</summary>
+    <p class="hint">A rule applies when a description contains its text (case-insensitive); the longest match wins.
+      Rules run on every import. Create one by ticking "Always when it contains" when you categorize.</p>
+    <div class="table-wrap">
+    <table class="items">
+      <thead><tr><th>Description contains</th><th>Category</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td>{{ r.pattern }}</td>
+          <td>{{ 'Not budgeted (transfer)' if r.excluded else r.line_item_name }}
+            {% if r.split_line_item_name %}<br><span class="small split-note">{{ r.split_amount_cents|money }} of each &rarr; {{ r.split_line_item_name }}{% if r.split_note %} · {{ r.split_note }}{% endif %}</span>{% endif %}</td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('transactions.delete_rule', rule_id=r.id) }}">
+              {{ csrf_field() }}{{ back_fields() }}<button type="submit" class="danger">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No rules yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</section>
+{% endblock %}

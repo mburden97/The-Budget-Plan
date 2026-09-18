@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Bank categories · Budget{% endblock %}
+
+{% macro line_select(index, selected, excluded, suggested) %}
+<select name="map-{{ index }}" aria-label="Budget line">
+  <option value="">(leave uncategorized)</option>
+  <option value="x" {% if excluded %}selected{% endif %}>Not budgeted (transfer)</option>
+  {% for g in groups if g.items %}
+  <optgroup label="{{ g.category.name }}">
+    {% for i in g.items %}
+    <option value="{{ i.id }}" {% if i.id == selected or (selected is none and not excluded and i.id == suggested) %}selected{% endif %}>{{ i.name }}</option>
+    {% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% block content %}
+<a class="back" href="{{ url_for('transactions.index') }}">&larr; Transactions</a>
+<h1>Bank categories</h1>
+<p class="hint spaced">Your bank labels each purchase (Chase: Groceries, Gas, Food &amp; Drink&hellip;). Match each
+  label to a budget line once, and every uncategorized transaction with that label gets that line, now and
+  on future imports. Your "Always for" rules still win. Suggested matches are pre-selected, but nothing
+  changes until you save.</p>
+
+{% if cats %}
+<form method="post" action="{{ url_for('transactions.save_bank_categories') }}">
+  {{ csrf_field() }}
+  <section class="panel">
+    <div class="table-wrap">
+    <table class="items">
+      <thead>
+        <tr><th>Bank category</th><th class="num">Transactions</th><th class="num">Uncategorized</th>
+            <th>Budget line</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for c in cats %}
+        {% set suggested = suggestions.get(c.name) %}
+        <tr>
+          <td>{{ c.name }}<input type="hidden" name="name-{{ loop.index }}" value="{{ c.name }}"></td>
+          <td class="num">{{ c.total }}</td>
+          <td class="num {{ 'bad' if c.uncategorized }}">{{ c.uncategorized }}</td>
+          <td>{{ line_select(loop.index, c.line_item_id, c.excluded, suggested) }}</td>
+          <td class="small muted">{% if c.mapped %}saved{% elif suggested %}suggested{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="form-actions">
+      <button type="submit">Save and categorize</button>
+      <span class="hint">"(leave uncategorized)" removes a saved match; transactions already categorized keep their line.</span>
+    </div>
+  </section>
+</form>
+{% else %}
+<section class="panel">
+  <p class="muted">No bank categories yet. Import a card CSV that has a Category column (Chase card
+    exports do) and pick it as the "Bank category" column. Re-importing a file you already imported
+    fills in the categories without adding duplicates.</p>
+</section>
+{% endif %}
+{% endblock %}

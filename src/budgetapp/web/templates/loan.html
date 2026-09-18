@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ loan.name }} · Loans · Budget{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('loans.index') }}">&larr; All loans</a>
+<h1>{{ loan.name }}{% if loan.institution %} <span class="muted">· {{ loan.institution }}</span>{% endif %}</h1>
+
+<section class="summary">
+  <div class="stat"><span class="label">Balance{% if loan.balance_as_of %} ({{ loan.balance_as_of }}){% endif %}</span><span class="value">{{ loan.balance_cents|money }}</span></div>
+  <div class="stat"><span class="label">APR</span><span class="value">{{ loan.annual_rate|percent }}</span></div>
+  <div class="stat"><span class="label">Monthly payment</span><span class="value">{{ loan.payment_cents|money }}</span></div>
+  <div class="stat {{ '' if current else 'bad' }}"><span class="label">Payoff</span><span class="value">{{ current.payoff_date|month_label if current else 'never' }}</span></div>
+  <div class="stat"><span class="label">Interest remaining</span><span class="value">{{ current.total_interest_cents|money if current else '–' }}</span></div>
+  {% if promo %}
+  <div class="stat {{ 'good' if promo.on_track else 'bad' }}">
+    <span class="label">Promo ends {{ promo.ends_on }}</span>
+    <span class="value">{{ promo.needed_cents|money }}/mo</span>
+    <span class="muted small">{% if promo.ended %}promo over with a balance left
+      {% elif promo.on_track %}needed over {{ promo.payments_left }} payments; you pay {{ promo.planned_cents|money }}
+      {% else %}needed to clear it in time; you pay {{ promo.planned_cents|money }}{% endif %}</span>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>What if I pay more?</h2>
+  <form method="get" action="{{ url_for('loans.detail', account_id=loan.account_id) }}" class="inline">
+    <label for="extra">Extra per month</label>
+    <input id="extra" name="extra" value="{{ whatif_input }}" inputmode="decimal" class="amount" placeholder="100.00">
+    <button type="submit">Calculate</button>
+  </form>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Scenario</th><th class="num">Monthly</th><th>Payoff</th><th class="num">Months</th><th class="num">Interest</th><th class="num">Saved vs. no extra</th></tr></thead>
+    <tbody>
+      {% for label, monthly, p in scenarios %}
+      <tr>
+        <td>{{ label }}</td>
+        <td class="num">{{ monthly|money }}</td>
+        {% if p %}
+        <td>{{ p.payoff_date|month_label }}</td>
+        <td class="num">{{ p.months }}</td>
+        <td class="num">{{ p.total_interest_cents|money }}</td>
+        <td class="num">{% if minimum %}{{ (minimum.total_interest_cents - p.total_interest_cents)|money }}{% if minimum.months > p.months %} <span class="muted">({{ minimum.months - p.months }} mo sooner)</span>{% endif %}{% else %}–{% endif %}</td>
+        {% else %}
+        <td colspan="4" class="bad">Payment doesn't cover the monthly interest.</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Payments</h2>
+  <form method="post" action="{{ url_for('loans.record_payment', account_id=loan.account_id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Date <input type="date" name="paid_on" value="{{ today }}" required></label>
+    <label>Amount <input name="amount" inputmode="decimal" value="{{ loan.payment_cents|money_input }}" required></label>
+    <label>Principal <input name="principal" inputmode="decimal" placeholder="from statement"></label>
+    <label>Interest <input name="interest" inputmode="decimal" placeholder="from statement"></label>
+    <label>Notes <input name="notes" maxlength="200"></label>
+    <button type="submit">Record payment</button>
+  </form>
+  <p class="hint">Leave principal and interest blank to estimate them from the APR. Copy them from your
+    statement to keep the balance exact.</p>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Date</th><th class="num">Amount</th><th class="num">Principal</th><th class="num">Interest</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+      {% for p in payments %}
+      <tr>
+        <td>{{ p.paid_on }}</td>
+        <td class="num">{{ p.amount_cents|money }}</td>
+        <td class="num">{{ p.principal_cents|money if p.principal_cents is not none else '–' }}</td>
+        <td class="num">{{ p.interest_cents|money if p.interest_cents is not none else '–' }}</td>
+        <td>{{ p.notes }}</td>
+        <td class="actions">
+          {% if loop.first %}
+          <form method="post" action="{{ url_for('loans.delete_payment', account_id=loan.account_id, payment_id=p.id) }}" data-confirm="Undo the {{ p.paid_on }} payment? The balance goes back up by its principal.">
+            {{ csrf_field() }}<button type="submit" class="danger">Undo</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No payments recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <details>
+    <summary>Amortization schedule, current plan ({{ schedule|length }} payments)</summary>
+    <div class="table-wrap">
+    <table class="items">
+      <thead><tr><th class="num">#</th><th>Due</th><th class="num">Payment</th><th class="num">Principal</th><th class="num">Interest</th><th class="num">Balance</th></tr></thead>
+      <tbody>
+        {% for row in schedule %}
+        <tr>
+          <td class="num">{{ row.number }}</td><td>{{ row.due }}</td>
+          <td class="num">{{ row.payment_cents|money }}</td><td class="num">{{ row.principal_cents|money }}</td>
+          <td class="num">{{ row.interest_cents|money }}</td><td class="num">{{ row.balance_cents|money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</section>
+
+<section class="panel">
+  <h2>Loan details</h2>
+  <form method="post" action="{{ url_for('loans.update', account_id=loan.account_id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Name <input name="name" value="{{ loan.name }}" required maxlength="100"></label>
+    <label>Lender <input name="institution" value="{{ loan.institution }}" maxlength="100"></label>
+    <label>APR % <input name="apr" value="{{ loan.annual_rate|percent_input }}" inputmode="decimal" required></label>
+    <label>Monthly payment <input name="min_payment" value="{{ loan.min_payment_cents|money_input }}" inputmode="decimal"></label>
+    <label>Extra monthly payment <input name="extra_payment" value="{{ loan.extra_payment_cents|money_input }}" inputmode="decimal"></label>
+    <label>Minimum payment
+      <select name="min_rule">
+        {% for key, label in min_rules.items() %}<option value="{{ key }}" {{ 'selected' if key == loan.min_rule }}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Minimum % of balance <input name="min_percent" value="{{ loan.min_percent|percent_input if loan.min_percent is not none else '' }}" inputmode="decimal" placeholder="e.g. 3"></label>
+    <label>Payment day of month <input type="number" name="payment_day" min="1" max="31" value="{{ loan.payment_day or '' }}"></label>
+    <label>Original amount <input name="original_principal" value="{{ loan.original_principal_cents|money_input }}" inputmode="decimal"></label>
+    <label>Term (months) <input type="number" name="term_months" min="1" max="1200" value="{{ loan.term_months or '' }}"></label>
+    <label>Start date <input type="date" name="start_date" value="{{ loan.start_date or '' }}"></label>
+    <label>Promo ends <input type="date" name="promo_ends_on" value="{{ loan.promo_ends_on or '' }}"></label>
+    <button type="submit">Save</button>
+  </form>
+  <p class="hint">To correct the balance, record it on the <a href="{{ url_for('networth.account', account_id=loan.account_id) }}">account page</a>.</p>
+  <form method="post" action="{{ url_for('loans.delete', account_id=loan.account_id) }}"
+        data-confirm="Delete “{{ loan.name }}”, its payments and balance history? This can't be undone.">
+    {{ csrf_field() }}<button type="submit" class="danger">Delete loan</button>
+  </form>
+</section>
+{% endblock %}

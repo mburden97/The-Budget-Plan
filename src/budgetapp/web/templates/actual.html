@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Budget vs. actual · Budget{% endblock %}
+{% block content %}
+<nav class="tabs">
+  <a href="{{ url_for('budget.index') }}">Plan</a>
+  <a class="active" aria-current="page" href="{{ url_for('budget.actual', month=month_q) }}">Actual</a>
+  <a href="{{ url_for('budget.subscriptions') }}">Subscriptions</a>
+</nav>
+<header class="page-head">
+  <h1>{{ result.month|month_label }}</h1>
+  <nav class="month-nav">
+    <a href="{{ url_for('budget.actual', month=prev_q) }}" aria-label="Previous month">&larr;</a>
+    <a href="{{ url_for('budget.actual', month=next_q) }}" aria-label="Next month">&rarr;</a>
+  </nav>
+</header>
+
+<section class="summary">
+  <div class="stat"><span class="label">Income received</span><span class="value">{{ result.income_actual_cents|money }}</span><span class="muted small">of {{ result.income_planned_cents|money }} planned</span></div>
+  {% set over = result.outflow_actual_cents > result.outflow_planned_cents %}
+  <div class="stat {{ 'bad' if over }}"><span class="label">Spent &amp; set aside</span><span class="value">{{ result.outflow_actual_cents|money }}</span><span class="muted small">of {{ result.outflow_planned_cents|money }} planned</span></div>
+  {% set net = result.income_actual_cents - result.outflow_actual_cents %}
+  <div class="stat {{ 'good' if net > 0 else ('bad' if net < 0) }}"><span class="label">Net this month</span><span class="value">{{ net|money }}</span></div>
+  <a class="stat {{ 'warn' if result.uncategorized_count }}" href="{{ url_for('transactions.index', month=month_q, show='uncategorized') }}">
+    <span class="label">Uncategorized</span><span class="value">{{ result.uncategorized_count }}</span>
+    <span class="muted small">{{ result.uncategorized_out_cents|money }} out · {{ result.uncategorized_in_cents|money }} in</span>
+  </a>
+</section>
+
+{% for g in result.groups if g.rows %}
+{% set income = g.category.kind == 'income' %}
+<section class="panel">
+  <header class="panel-head">
+    <h2>{{ g.category.name }} <span class="badge">{{ kinds[g.category.kind] }}</span></h2>
+    <span class="subtotal">{{ g.actual_cents|money }} of {{ g.planned_cents|money }}</span>
+  </header>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Item</th><th class="num">Planned</th><th class="num">Actual</th>
+      <th class="num">{{ 'Difference' if income else 'Remaining' }}</th><th class="progress-col"></th></tr></thead>
+    <tbody>
+      {% for r in g.rows %}
+      <tr>
+        <td>{{ r.item.name }}</td>
+        <td class="num">{{ r.planned_cents|money }}</td>
+        <td class="num">{{ r.actual_cents|money }}</td>
+        {% if income %}
+        {% set diff = r.actual_cents - r.planned_cents %}
+        <td class="num {{ 'good' if diff >= 0 else 'muted' }}">{{ diff|money }}</td>
+        {% else %}
+        <td class="num {{ 'bad' if r.remaining_cents < 0 }}">{{ r.remaining_cents|money }}</td>
+        {% endif %}
+        <td><progress max="{{ r.planned_cents or 1 }}" value="{{ [r.actual_cents, r.planned_cents]|min if r.actual_cents > 0 else 0 }}" aria-label="{{ r.item.name }} progress"></progress></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
+
+<p class="hint">Actuals come from categorized transactions for this month. Transactions marked
+  "not budgeted" (transfers, card payments) are ignored.
+  <a href="{{ url_for('transactions.index', month=month_q) }}">See transactions &rarr;</a></p>
+{% endblock %}

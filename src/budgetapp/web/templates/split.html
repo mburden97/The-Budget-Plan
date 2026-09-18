@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Split transaction · Budget{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('transactions.index', month=month_q, show=show) }}">&larr; Transactions</a>
+<h1>Split a transaction</h1>
+
+<section class="summary">
+  <div class="stat"><span class="label">{{ txn.posted_on }}</span><span class="value small">{{ txn.description }}</span>
+    <span class="muted small">{{ txn.account_name or '' }}</span></div>
+  <div class="stat"><span class="label">Amount</span><span class="value">{{ txn.amount_cents|money }}</span></div>
+  <div class="stat"><span class="label">Stays on {{ txn.line_item_name or 'Uncategorized' }}</span>
+    <span class="value">{{ remainder|money }}</span></div>
+</section>
+
+<section class="panel">
+  <h2>Splits</h2>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Budget line</th><th>Label</th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for p in parts %}
+      <tr>
+        <td>{{ p.line_item_name }}</td>
+        <td class="muted">{{ p.note or '–' }}</td>
+        <td class="num">{{ p.amount_cents|money }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('transactions.delete_split', split_id=p.id) }}" data-confirm="Remove this split?">
+            {{ csrf_field() }}
+            <input type="hidden" name="month" value="{{ month_q }}">
+            {% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+            <button type="submit" class="danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">Not split yet: all of it is on {{ txn.line_item_name or 'Uncategorized' }}.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Removing a split here doesn't delete a rule that made it; manage rules on the Transactions page.</p>
+</section>
+
+{% if not txn.excluded %}
+<section class="panel">
+  <h2>Add a split</h2>
+  <form method="post" action="{{ url_for('transactions.add_split', txn_id=txn.id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="month" value="{{ month_q }}">
+    {% if show %}<input type="hidden" name="show" value="{{ show }}">{% endif %}
+    <label>Budget line
+      <select name="line_item_id" required>
+        {% for g in groups if g.items %}
+        <optgroup label="{{ g.category.name }}">
+          {% for i in g.items %}<option value="{{ i.id }}">{{ i.name }}</option>{% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Amount <input name="amount" inputmode="decimal" required placeholder="20.00"></label>
+    <label>Label <input name="note" maxlength="60" placeholder="e.g. Cloud storage"></label>
+    <label class="check wide"><input type="checkbox" name="every">
+      Split every charge whose description contains
+      <input name="pattern" value="{{ pattern }}" maxlength="100" class="pattern" aria-label="Description contains">
+      the same way (past and future)</label>
+    <button type="submit">Add split</button>
+  </form>
+  <p class="hint">The split moves that much of the charge to the chosen line; the rest stays on
+    {{ txn.line_item_name or 'Uncategorized' }}. Account balances don't change.</p>
+</section>
+{% endif %}
+{% endblock %}

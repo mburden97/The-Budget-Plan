@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Choose a new passphrase · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Choose a new passphrase</h1>
+  <p>Your recovery code opened the vault. Set a new passphrase before anything else; the old one stops
+    working. Your recovery code keeps working.</p>
+  <form method="post" action="{{ url_for('auth.recover_passphrase_post') }}" class="stack">
+    {{ csrf_field() }}
+    <label>New passphrase
+      <input type="password" name="passphrase" minlength="{{ min_length }}" required autofocus autocomplete="new-password">
+    </label>
+    <label>Confirm passphrase
+      <input type="password" name="confirm" minlength="{{ min_length }}" required autocomplete="new-password">
+    </label>
+    <p class="hint">At least {{ min_length }} characters. Save it in your password manager.</p>
+    <button type="submit">Set passphrase and open</button>
+  </form>
+</section>
+{% endblock %}

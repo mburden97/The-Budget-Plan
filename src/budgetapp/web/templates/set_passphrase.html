@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Set a passphrase · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Set a passphrase</h1>
+  <p>Your budget vault opens without a passphrase right now, so anyone with a copy of the file can read
+    it. Choose one to finish protecting it. From now on the app asks for it every time it opens.</p>
+  <p><strong>There is no reset or recovery.</strong> Save it in your password manager before you continue.</p>
+  <form method="post" action="{{ url_for('auth.set_passphrase_post') }}" class="stack">
+    {{ csrf_field() }}
+    <label>New passphrase
+      <input type="password" name="passphrase" minlength="{{ min_length }}" required autofocus autocomplete="new-password">
+    </label>
+    <label>Confirm passphrase
+      <input type="password" name="confirm" minlength="{{ min_length }}" required autocomplete="new-password">
+    </label>
+    <p class="hint">At least {{ min_length }} characters. Four or five random words is a good choice.</p>
+    <button type="submit">Set passphrase and open</button>
+  </form>
+</section>
+{% endblock %}

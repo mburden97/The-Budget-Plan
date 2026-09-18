@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Budget{% endblock %}
+{% block body_attrs %}{% if home_video %} class="has-backdrop"{% endif %}{% endblock %}
+{% block backdrop %}{% if home_video %}
+<video class="backdrop-video" muted loop playsinline preload="auto" aria-hidden="true"
+       src="{{ url_for('static', filename=home_video, v=home_video_v) }}"></video>
+<div class="backdrop-tint" aria-hidden="true"></div>
+{% endif %}{% endblock %}
+{% block top_right %}{% if avatar %}<img class="avatar" src="{{ url_for('static', filename='avatar.gif') }}" alt="" width="52" height="52">{% endif %}{% endblock %}
+{% block content %}
+<div class="dash">
+  <div class="dash-main">
+    <div class="page-head">
+      <h1>Main Dashboard</h1>
+      <span class="push-right pill-label">{{ today|month_label }}</span>
+    </div>
+    <nav class="tabs">
+      <a class="active" aria-current="page" href="{{ url_for('dashboard.index') }}">Overview</a>
+      <a href="{{ url_for('budget.index') }}">Budget</a>
+      <a href="{{ url_for('transactions.index') }}">Transactions</a>
+      <a href="{{ url_for('goals.index') }}">Goals</a>
+    </nav>
+
+    {% if stale %}
+    <div class="flash flash-warn">Balance check-in due for {{ stale|map(attribute='name')|join(', ') }}.
+      <a href="{{ url_for('networth.index') }}">Update balances &rarr;</a></div>
+    {% endif %}
+    {% if month.uncategorized_count %}
+    <div class="flash flash-warn">{{ month.uncategorized_count }} transaction(s) this month need a category.
+      <a href="{{ url_for('transactions.index', show='uncategorized') }}">Categorize &rarr;</a></div>
+    {% endif %}
+    {% if late_charges %}
+    <div class="flash flash-warn">{{ late_charges }} charge(s) from subscriptions you cancelled.
+      <a href="{{ url_for('budget.subscriptions') }}">Review &rarr;</a></div>
+    {% endif %}
+    {% if recovery_missing %}
+    <div class="flash flash-warn">No recovery code yet: if you lose your passphrase, your budget can't be opened.
+      <a href="{{ url_for('settings.index', _anchor='recovery') }}">Create one &rarr;</a></div>
+    {% endif %}
+    {% if upcoming and upcoming.start_cents < 0 %}
+    <div class="flash flash-warn">{{ upcoming.account }} looks overdrawn by this count, so its recorded balance is
+      probably out of date. <a href="{{ url_for('networth.index') }}">Update the balance &rarr;</a></div>
+    {% elif upcoming and upcoming.low_cents < 0 %}
+    <div class="flash flash-warn">{{ upcoming.account }} could go below $0{% if upcoming.short %} on
+      {{ upcoming.short.when.strftime('%b ') ~ upcoming.short.when.day }} ({{ upcoming.short.label }}){% endif %}.
+      Move money in or shift a payment. <a href="#next-days">See the next {{ upcoming.days }} days &rarr;</a></div>
+    {% endif %}
+    {% for loan, promo in promo_alerts %}
+    <div class="flash flash-warn">{{ loan.name }}:
+      {% if promo.ended %}its promo ended on {{ promo.ends_on }} with a balance left.
+      {% else %}pay {{ promo.needed_cents|money }}/mo to clear it before the promo ends on {{ promo.ends_on }}
+        (the plan pays {{ promo.planned_cents|money }}).{% endif %}
+      <a href="{{ url_for('loans.detail', account_id=loan.account_id) }}">Review &rarr;</a></div>
+    {% endfor %}
+    {% for f in behind %}
+    <div class="flash flash-warn">“{{ f.name }}” needs {{ f.needed_monthly_cents(today)|money }}/mo; the budget sets aside
+      {{ f.budgeted_monthly_cents|money }}. <a href="{{ url_for('goals.index') }}">Review &rarr;</a></div>
+    {% endfor %}
+
+    <div class="dash-grid">
+      <section class="card io-card">
+        <div class="io-row">
+          <span class="icon-sq red" aria-hidden="true">&uarr;</span>
+          <div><div class="io-value">{{ totals.outflow_cents|money }}</div><div class="muted small">Money out this month</div></div>
+        </div>
+        <div class="io-row">
+          <span class="icon-sq yellow" aria-hidden="true">&darr;</span>
+          <div><div class="io-value">{{ totals.inflow_cents|money }}</div><div class="muted small">Money in this month</div></div>
+        </div>
+      </section>
+
+      {% set left = plan.unallocated_cents %}
+      <a class="card mini-card" href="{{ url_for('budget.index') }}">
+        <div class="muted small">Left to assign</div>
+        <div class="mini-value {{ 'bad' if left < 0 else ('warn' if left > 0) }}">{{ left|money }}</div>
+        <progress max="{{ plan.income_cents or 1 }}" value="{{ [plan.outflow_cents, plan.income_cents]|min }}" aria-label="Share of income assigned"></progress>
+        <div class="muted small">{{ plan.outflow_cents|money }} of {{ plan.income_cents|money }}/mo assigned</div>
+      </a>
+
+      <a class="card ring-card" href="{{ url_for('budget.actual') }}">
+        {{ ring }}
+        <div class="legend"><span><span class="dot red"></span>Spending</span><span><span class="dot yellow"></span>Saving</span></div>
+      </a>
+
+      <section class="card chart-card">
+        <header class="panel-head">
+          <h2>Net worth</h2>
+          <span class="push-right pill-label">{{ net.net_cents|money }}</span>
+        </header>
+        {% if chart %}{{ chart }}{% else %}
+        <p class="muted">Record balances on the <a href="{{ url_for('networth.index') }}">Net worth</a> page in two different months to see a trend.</p>
+        {% endif %}
+      </section>
+
+      <section class="card bars-card">
+        <header class="panel-head">
+          <h2>{{ month.month|month_label }} by category</h2>
+          <a class="push-right small" href="{{ url_for('budget.actual') }}">Details &rarr;</a>
+        </header>
+        <div class="bar-list">
+          {% for g in month.groups if g.rows and g.category.kind != 'income' %}
+          {% set over = g.actual_cents > g.planned_cents %}
+          <div class="bar-row">
+            <span class="bar-name">{{ g.category.name }}</span>
+            <progress class="{{ 'over' if over }}" max="{{ g.planned_cents or 1 }}" value="{{ [g.actual_cents, g.planned_cents]|min }}" aria-label="{{ g.category.name }}"></progress>
+            <span class="num small {{ 'bad' if over }}">{{ g.actual_cents|money }} <span class="muted">/ {{ g.planned_cents|money }}</span></span>
+          </div>
+          {% else %}
+          <p class="muted">Add budget lines on the <a href="{{ url_for('budget.index') }}">Budget</a> page to track the month.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <a class="card debt-card" href="{{ url_for('loans.index') }}">
+        <h2>Debt-free</h2>
+        <div class="debt-pill">
+          <span class="debt-total">{{ debt_total|money }}</span>
+          <span class="debt-date">{% if loan_count %}paid off {{ debt_free|month_label }}{% else %}no loans tracked{% endif %}</span>
+        </div>
+        <div class="muted small">{{ loan_count }} loan{{ '' if loan_count == 1 else 's' }} at current payments</div>
+      </a>
+
+      {% if upcoming %}
+      <section class="card flow-card" id="next-days">
+        <header class="panel-head">
+          <h2>Next {{ upcoming.days }} days in {{ upcoming.account }}</h2>
+          <span class="push-right pill-label {{ 'bad' if upcoming.low_cents < 0 }}">Low point {{ upcoming.low_cents|money }}</span>
+        </header>
+        <div class="table-wrap">
+        <table class="items">
+          <thead><tr><th>Date</th><th>Expected</th><th class="num">Amount</th><th class="num">Balance after</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="muted">Now</td>
+              <td class="muted">{% if upcoming.balance_as_of %}Balance checked in {{ upcoming.balance_as_of }}{% if upcoming.counted %}, plus {{ upcoming.counted }} newer transaction{{ '' if upcoming.counted == 1 else 's' }}{% endif %}{% else %}No balance recorded yet{% endif %}</td>
+              <td></td>
+              <td class="num {{ 'bad' if upcoming.start_cents < 0 }}">{{ upcoming.start_cents|money }}</td>
+            </tr>
+            {% for e in upcoming.events %}
+            <tr>
+              <td>{{ e.when.strftime('%b ') ~ e.when.day }}</td>
+              <td>{{ e.label }}</td>
+              <td class="num {{ 'good' if e.amount_cents > 0 }}">{{ '+' if e.amount_cents > 0 }}{{ e.amount_cents|money }}</td>
+              <td class="num {{ 'bad' if e.balance_cents < 0 }}">{{ e.balance_cents|money }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="muted">No repeating bills or paychecks expected.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+        <p class="hint">Bills and paychecks that repeated on a schedule at least 3 times in the last 4 months,
+          at their usual amount, plus loan payments from the <a href="{{ url_for('loans.index') }}">Loans</a> page on
+          their due days. One-off charges and irregular payments (like card payments made at different times)
+          can't be predicted, so keep a cushion, and keep the balance current on
+          <a href="{{ url_for('networth.index') }}">Net worth</a>.</p>
+      </section>
+      {% endif %}
+
+      <section class="card log-card">
+        <div>
+          <h2>Log a loan payment</h2>
+          {% for loan in loans %}
+          <form method="post" action="{{ url_for('dashboard.log_loan_payment') }}" class="log-row">
+            {{ csrf_field() }}<input type="hidden" name="account_id" value="{{ loan.account_id }}">
+            <span class="log-name">{{ loan.name }}<span class="muted small">{{ loan.balance_cents|money }} left</span></span>
+            <input name="amount" inputmode="decimal" class="amount" value="{{ loan.payment_cents|money_input }}" required aria-label="{{ loan.name }} payment amount">
+            <input type="date" name="paid_on" value="{{ today.isoformat() }}" required aria-label="{{ loan.name }} payment date">
+            <button type="submit" class="secondary">Log</button>
+          </form>
+          {% else %}
+          <p class="muted">No loans with a balance. <a href="{{ url_for('loans.index') }}">Loans &rarr;</a></p>
+          {% endfor %}
+        </div>
+        <div>
+          <h2>Log a transfer to savings</h2>
+          {% if cash_accounts %}
+          {% set savings = cash_accounts|selectattr('emergency_fund')|list %}
+          {% set spending = cash_accounts|rejectattr('emergency_fund')|list %}
+          {% set to_id = (savings or cash_accounts)[0].id %}
+          {% set from_id = spending[0].id if spending else none %}
+          <form method="post" action="{{ url_for('dashboard.log_transfer') }}" class="grid-form log-transfer">
+            {{ csrf_field() }}
+            <label>To
+              <select name="to_account_id">
+                {% for a in cash_accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == to_id }}>{{ a.name }}</option>{% endfor %}
+              </select>
+            </label>
+            <label>From
+              <select name="from_account_id">
+                {% for a in cash_accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == from_id }}>{{ a.name }}</option>{% endfor %}
+                <option value="" {{ 'selected' if from_id is none }}>Not tracked here</option>
+              </select>
+            </label>
+            {% if funds %}
+            <label>For
+              <select name="fund_id">
+                <option value="">Emergency fund</option>
+                {% for f in funds %}<option value="{{ f.id }}">{{ f.name }} (sinking fund)</option>{% endfor %}
+              </select>
+            </label>
+            {% endif %}
+            <label>Amount <input name="amount" inputmode="decimal" class="amount" required placeholder="100.00"></label>
+            <label>Date <input type="date" name="on" value="{{ today.isoformat() }}" required></label>
+            <button type="submit">Log transfer</button>
+          </form>
+          <p class="hint">Raises the savings balance and lowers the account it came from.
+            {% if funds %}For a sinking fund also adds it to that fund's Saved, or takes it off when
+            the money leaves savings to pay the bill.{% endif %}</p>
+          {% else %}
+          <p class="muted">Add a cash account on the <a href="{{ url_for('networth.index') }}">Net worth</a> page first.</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="dash-side">
+    <div>
+      <div class="side-title">Net worth</div>
+      <div class="side-big">{{ net.net_cents|money }}</div>
+      <div class="small {{ 'good' if change_cents > 0 else ('bad' if change_cents < 0 else 'muted') }}">{{ change_cents|money }} in 30 days</div>
+    </div>
+
+    <div class="trio">
+      <div><span class="muted">Income</span><strong>{{ plan.income_cents|compact }}</strong></div>
+      <div><span class="muted">Planned</span><strong>{{ plan.outflow_cents|compact }}</strong></div>
+      <div><span class="muted">Saving</span><strong>{{ '%.0f'|format(plan.savings_rate * 100) ~ '%' if plan.savings_rate is not none else '–' }}</strong></div>
+    </div>
+
+    <a class="money-card" href="{{ url_for('goals.index') }}">
+      <span class="circles" aria-hidden="true"><i class="c1"></i><i class="c2"></i></span>
+      <div class="money-value">{{ ef.saved_cents|money }}</div>
+      <div class="muted">Emergency fund</div>
+      {% if ef.set_aside_cents %}<div class="small muted">after {{ ef.set_aside_cents|money }} set aside for sinking funds</div>{% endif %}
+      {% if ef.monthly_interest_cents %}<div class="small good">+{{ ef.monthly_interest_cents|money }}/mo interest</div>{% endif %}
+      <div class="money-foot">
+        {% if ef.months_covered is not none %}{{ '%.1f'|format(ef.months_covered) }} of {{ ef.target_months }} months{% else %}Target {{ ef.target_months }} months{% endif %}
+        · {{ ef.accounts|join(', ') if ef.accounts else 'no account flagged' }}
+      </div>
+    </a>
+
+    <a class="money-card" href="{{ url_for('brokerage.index') }}">
+      <div class="muted">Investments</div>
+      <div class="money-value">{{ invest_total|money }}</div>
+      <div class="small {{ 'good' if invest_gain > 0 else ('bad' if invest_gain < 0 else 'muted') }}">{{ invest_gain|money }} total gain</div>
+      <div class="money-foot">Prices: {{ refreshed or 'never refreshed' }}</div>
+    </a>
+
+    {% if funds %}
+    <div class="side-list">
+      <div class="side-title">Sinking funds</div>
+      {% for f in funds %}
+      <a class="side-item" href="{{ url_for('goals.index') }}">
+        <span>{{ f.name }}</span>
+        <span class="muted small">{{ f.saved_cents|compact }} / {{ f.target_cents|compact }}</span>
+        <progress max="1" value="{{ f.progress }}" aria-label="{{ f.name }} progress"></progress>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

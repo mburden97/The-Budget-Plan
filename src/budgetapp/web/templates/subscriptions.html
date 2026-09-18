@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Subscriptions · Budget{% endblock %}
+{% macro release_form(s) %}
+<form method="post" action="{{ url_for('budget.release_subscription') }}"
+      data-confirm="{{ s.name }} isn't a subscription? Its charges move back to your everyday spending.">
+  {{ csrf_field() }}<input type="hidden" name="pattern" value="{{ s.pattern }}">
+  <button type="submit" class="danger">Not a subscription</button>
+</form>
+{% endmacro %}
+{% macro cancel_form(s) %}
+<form method="post" action="{{ url_for('budget.cancel_subscription') }}"
+      data-confirm="Mark {{ s.name }} as cancelled today? It leaves the active list, and any later charge gets flagged.">
+  {{ csrf_field() }}<input type="hidden" name="pattern" value="{{ s.pattern }}"><input type="hidden" name="name" value="{{ s.name }}">
+  <button type="submit" class="secondary">Cancelled</button>
+</form>
+{% endmacro %}
+
+{% block content %}
+<nav class="tabs">
+  <a href="{{ url_for('budget.index') }}">Plan</a>
+  <a href="{{ url_for('budget.actual') }}">Actual</a>
+  <a class="active" aria-current="page" href="{{ url_for('budget.subscriptions') }}">Subscriptions</a>
+</nav>
+
+{% if late %}
+<div class="flash flash-warn">Charged after you cancelled:
+  {% for l in late %}{{ l.subscription }} on {{ l.posted_on }} ({{ l.amount_cents|money }}{{ ', ' ~ l.account if l.account }}){{ '; ' if not loop.last }}{% endfor %}.
+  If that was an expected final charge, move the cancel date under Cancelled.</div>
+{% endif %}
+{% if not lines %}
+<div class="flash flash-info">Add a budget line with "Subscriptions" or "Membership" in its name, then file
+  subscription charges there (or use the list at the bottom of this page).</div>
+{% endif %}
+
+<section class="summary">
+  <div class="stat"><span class="label">Active subscriptions</span><span class="value">{{ active|length }}</span></div>
+  <div class="stat {{ 'bad' if planned and monthly_total > planned }}">
+    <span class="label">Cost per month</span><span class="value">{{ monthly_total|money }}</span>
+    <span class="muted small">{{ planned|money }} budgeted</span>
+  </div>
+  <div class="stat"><span class="label">Cost per year</span><span class="value">{{ (monthly_total * 12)|money }}</span></div>
+  <div class="stat"><span class="label">Spent, last 12 months</span><span class="value">{{ spent_12|money }}</span></div>
+  {% if cancelled %}
+  <div class="stat"><span class="label">Cancelled</span><span class="value">{{ cancelled_monthly|money }}</span>
+    <span class="muted small">a month no longer spent</span></div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Active</h2>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>Subscription</th><th>How often</th><th class="num">Charge</th><th class="num">Per month</th>
+          <th>Last charged</th><th>Next expected</th><th>Card</th><th class="num">Last 12 months</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for s in active %}
+      {% set next = s.next_due(today) %}
+      <tr>
+        <td>{{ s.name }}{% if s.is_credit %} <span class="muted small">· credit</span>{% endif %}</td>
+        <td class="muted">{{ s.cadence_label }}</td>
+        <td class="num">{{ s.typical_cents|money }}</td>
+        <td class="num">{{ s.monthly_cents|money if s.monthly_cents is not none else '–' }}</td>
+        <td>{{ s.last.posted_on }}</td>
+        <td>{{ next if next else '–' }}</td>
+        <td class="muted">{{ s.accounts|join(', ') }}</td>
+        <td class="num">{{ s.spent_since(year_ago)|money }}</td>
+        <td class="actions">{{ cancel_form(s) }}{{ release_form(s) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No active subscriptions found.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if active %}
+    <tfoot>
+      <tr class="total-row"><td colspan="3">Total</td><td class="num">{{ monthly_total|money }}</td>
+        <td colspan="3"></td><td class="num">{{ active_12|money }}</td><td></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  </div>
+  <p class="hint">How often and the next date are worked out from the gaps between charges. A subscription moves
+    to "No longer charging" once a charge is overdue by about half a cycle.</p>
+  {% if lines %}
+  <form method="post" action="{{ url_for('budget.adopt_subscription') }}" class="inline">
+    {{ csrf_field() }}
+    <label for="missing-pattern">Missing one? Description contains</label>
+    <input id="missing-pattern" name="pattern" required minlength="3" maxlength="100" placeholder="e.g. NETFLIX">
+    <button type="submit" class="secondary">Add subscription</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if stopped %}
+<section class="panel">
+  <details>
+    <summary>No longer charging ({{ stopped|length }})</summary>
+    <div class="table-wrap">
+    <table class="items">
+      <thead><tr><th>Subscription</th><th>How often</th><th class="num">Last charge</th><th>Last charged</th>
+                 <th>Card</th><th class="num">Total spent</th><th></th></tr></thead>
+      <tbody>
+        {% for s in stopped %}
+        <tr>
+          <td>{{ s.name }}</td>
+          <td class="muted">{{ s.cadence_label }}</td>
+          <td class="num">{{ s.last.amount_cents|money }}</td>
+          <td>{{ s.last.posted_on }}</td>
+          <td class="muted">{{ s.accounts|join(', ') }}</td>
+          <td class="num">{{ s.spent_since(s.charges[0].posted_on)|money }}</td>
+          <td class="actions">{{ cancel_form(s) }}{{ release_form(s) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</section>
+{% endif %}
+
+{% if cancelled %}
+<section class="panel">
+  <h2>Cancelled</h2>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Subscription</th><th>Cancelled on</th><th>Last charged</th><th class="num">Was per month</th>
+               <th>Card</th><th></th></tr></thead>
+    <tbody>
+      {% for c, s in cancelled %}
+      <tr>
+        <td>{{ c.name }}{% if c.pattern in late_patterns %} <span class="bad small">· charged since</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_for('budget.cancel_subscription') }}" class="inline tight">
+            {{ csrf_field() }}<input type="hidden" name="pattern" value="{{ c.pattern }}"><input type="hidden" name="name" value="{{ c.name }}">
+            <input type="date" name="on" value="{{ c.cancelled_on.isoformat() }}" required aria-label="{{ c.name }} cancelled on">
+            <button type="submit" class="link">Save</button>
+          </form>
+        </td>
+        <td>{{ s.last.posted_on if s else '–' }}</td>
+        <td class="num">{{ s.monthly_cents|money if s and s.monthly_cents is not none else '–' }}</td>
+        <td class="muted">{{ s.accounts|join(', ') if s else '' }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('budget.uncancel_subscription') }}">
+            {{ csrf_field() }}<input type="hidden" name="pattern" value="{{ c.pattern }}">
+            <button type="submit" class="danger">Undo</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Any charge that posts after the cancel date is flagged here, on the home page and when you import.</p>
+</section>
+{% endif %}
+
+{% if maybe and lines %}
+<section class="panel">
+  <h2>Possible subscriptions filed elsewhere</h2>
+  <p class="hint">These repeat about once a month at a steady amount. Moving one files all its past charges here and
+    saves a rule for future ones. Regular restaurant visits can show up too; just leave those.</p>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Merchant</th><th class="num">Charge</th><th class="num">Months</th><th>Last charged</th>
+               <th>Filed under</th><th></th></tr></thead>
+    <tbody>
+      {% for s in maybe %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td class="num">{{ s.typical_cents|money }}</td>
+        <td class="num">{{ s.month_count }}</td>
+        <td>{{ s.last.posted_on }}</td>
+        <td class="muted">{{ s.line_name or 'Uncategorized' }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('budget.adopt_subscription') }}"
+                data-confirm="Move every {{ s.name }} charge to {{ lines[0].name }}?">
+            {{ csrf_field() }}<input type="hidden" name="pattern" value="{{ s.pattern }}">
+            <button type="submit" class="secondary">Move to subscriptions</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

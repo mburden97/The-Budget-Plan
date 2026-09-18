@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "budgetapp"
+version = "0.1.0"
+description = "Personal, local-only, encrypted budget, loan, brokerage and net worth tracker."
+readme = "README.md"
+license = {text = "GPL-3.0-only"}
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=44",  # AES-256-GCM + Argon2id
+    "flask>=3.0",
+    "waitress>=3.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+budget = "budgetapp.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+budgetapp = ["migrations/*.sql", "web/templates/*.html", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

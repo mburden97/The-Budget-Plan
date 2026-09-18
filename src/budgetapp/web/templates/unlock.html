@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Unlock · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Unlock</h1>
+  <form method="post" action="{{ url_for('auth.unlock_post') }}" class="stack">
+    {{ csrf_field() }}
+    <label>Passphrase
+      <input type="password" name="passphrase" required autofocus autocomplete="current-password">
+    </label>
+    <button type="submit">Unlock</button>
+  </form>
+  {% if recovery %}
+  <p class="hint"><a href="{{ url_for('auth.recover') }}">Forgot your passphrase? Use your recovery code</a></p>
+  {% endif %}
+</section>
+{% endblock %}

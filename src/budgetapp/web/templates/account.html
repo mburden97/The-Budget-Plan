@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ account.name }} · Budget{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('networth.index') }}">&larr; Net worth</a>
+<h1>{{ account.name }} <span class="badge">{{ account.type_label }}</span></h1>
+{% if account.archived %}
+<p class="muted">Archived: hidden from lists and check-in reminders, but still counted in net worth.
+  Untick "Archived" below and save to restore it.</p>
+{% endif %}
+{% if account.monthly_interest_cents %}
+<p class="muted">Earning about <strong class="good">{{ account.monthly_interest_cents|money }} a month</strong>
+  at {{ account.apy|percent(2) }} APY on the latest balance.</p>
+{% endif %}
+{% if account.type == 'loan' %}
+<p><a href="{{ url_for('loans.detail', account_id=account.id) }}">Open loan details &rarr;</a></p>
+{% endif %}
+
+<section class="panel">
+  <h2>Details</h2>
+  <form method="post" action="{{ url_for('networth.update_account', account_id=account.id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Name <input name="name" value="{{ account.name }}" required maxlength="100"></label>
+    <label>Institution <input name="institution" value="{{ account.institution }}" maxlength="100"></label>
+    {% if not account.is_liability %}
+    <label>Interest rate (APY %) <input name="apy" value="{{ account.apy|percent_input }}" inputmode="decimal" placeholder="e.g. 3.0"></label>
+    {% endif %}
+    <label class="wide">Notes <input name="notes" value="{{ account.notes }}" maxlength="500"></label>
+    <label class="check"><input type="checkbox" name="include_in_net_worth" {% if account.include_in_net_worth %}checked{% endif %}> Count in net worth</label>
+    {% if not account.is_liability %}
+    <label class="check"><input type="checkbox" name="emergency_fund" {% if account.emergency_fund %}checked{% endif %}> Part of emergency fund</label>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="archived" {% if account.archived %}checked{% endif %}> Archived (closed)</label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Balance history</h2>
+  {% if auto %}
+  <p class="hint">This account's balance is calculated from its holdings when prices refresh.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('networth.record_balance', account_id=account.id) }}" class="inline">
+    {{ csrf_field() }}
+    <input name="balance" inputmode="decimal" class="amount" placeholder="Balance" required aria-label="Balance">
+    <input type="date" name="as_of" value="{{ today }}" required aria-label="As of">
+    <button type="submit">Record</button>
+  </form>
+  {% endif %}
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Date</th><th class="num">Balance</th><th></th></tr></thead>
+    <tbody>
+      {% for snap in history %}
+      <tr>
+        <td>{{ snap.as_of }}</td>
+        <td class="num">{{ snap.balance_cents|money }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_for('networth.delete_snapshot', snapshot_id=snap.id) }}" data-confirm="Delete the {{ snap.as_of }} balance?">
+            {{ csrf_field() }}<button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No balances recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <form method="post" action="{{ url_for('networth.delete_account', account_id=account.id) }}"
+        data-confirm="Delete “{{ account.name }}” and its entire history? This can't be undone.">
+    {{ csrf_field() }}
+    <button type="submit" class="danger">Delete account</button>
+    <span class="hint">To keep history, mark it archived instead.</span>
+  </form>
+</section>
+{% endblock %}

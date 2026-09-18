@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Loans · Budget{% endblock %}
+{% block content %}
+<section class="summary">
+  <div class="stat"><span class="label">Total owed</span><span class="value">{{ total_owed|money }}</span></div>
+  <div class="stat"><span class="label">Monthly payments</span><span class="value">{{ total_min|money }}</span></div>
+  <div class="stat"><span class="label">Extra each month</span><span class="value">{{ total_extra|money }}</span></div>
+  <div class="stat"><span class="label">Debt-free (current plan)</span><span class="value">{{ debt_free|month_label }}</span></div>
+</section>
+
+<section class="panel">
+  <h2>Your loans</h2>
+  {% if rows %}
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>Loan</th><th class="num">Balance</th><th class="num">APR</th><th class="num">Payment</th>
+          <th class="num">Extra</th><th class="num">Payoff</th><th class="num">Interest left</th></tr>
+    </thead>
+    <tbody>
+      {% for loan, p, promo in rows %}
+      <tr>
+        <td><a href="{{ url_for('loans.detail', account_id=loan.account_id) }}">{{ loan.name }}</a>{% if loan.institution %} <span class="muted">· {{ loan.institution }}</span>{% endif %}
+          {% if promo %}<br><span class="small {{ 'muted' if promo.on_track else 'bad' }}">promo ends {{ promo.ends_on }}{% if not promo.on_track %}: needs {{ promo.needed_cents|money }}/mo{% endif %}</span>{% endif %}</td>
+        <td class="num">{{ loan.balance_cents|money }}</td>
+        <td class="num">{{ loan.annual_rate|percent }}</td>
+        <td class="num">{{ loan.min_payment_cents|money }}
+          {% if loan.min_rule == 'percent' %}<br><span class="small muted">min {{ loan.min_percent|percent }} of balance</span>
+          {% elif loan.min_rule == 'none' %}<br><span class="small muted">no minimum</span>{% endif %}
+          {% if loan.payment_cents < loan.required_minimum_cents %}<br><span class="small bad">below the {{ loan.required_minimum_cents|money }} minimum</span>{% endif %}</td>
+        <td class="num">{{ loan.extra_payment_cents|money }}</td>
+        <td class="num">{% if p %}{{ p.payoff_date|month_label }}{% else %}<span class="bad">never</span>{% endif %}</td>
+        <td class="num">{{ p.total_interest_cents|money if p else '–' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No loans yet. Add one below.</p>
+  {% endif %}
+</section>
+
+{% if plans %}
+<section class="panel">
+  <h2>Payoff strategy</h2>
+  <form method="get" action="{{ url_for('loans.index') }}" class="inline">
+    <label for="extra">Extra per month, on top of current payments</label>
+    <input id="extra" name="extra" value="{{ extra_input }}" inputmode="decimal" class="amount" placeholder="0.00">
+    <button type="submit">Compare</button>
+  </form>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>Strategy</th><th>Debt-free</th><th class="num">Months</th><th class="num">Total interest</th>
+          <th class="num">Saved vs. no rollover</th><th>Payoff order</th></tr>
+    </thead>
+    <tbody>
+      {% for row in plans %}
+      <tr>
+        <td>{{ row.label }}{% if row.missed %}<br><span class="small bad">Leaves a balance on {{ row.missed|join(', ') }} when its promo ends</span>{% endif %}</td>
+        {% if row.plan %}
+        <td>{{ row.debt_free|month_label }}</td>
+        <td class="num">{{ row.plan.months }}</td>
+        <td class="num">{{ row.plan.total_interest_cents|money }}</td>
+        <td class="num">{% if row.baseline_misses_promo %}<span class="small muted">n/a: current payments miss the promo</span>{% else %}{{ row.saved|money if row.saved is not none else '–' }}{% endif %}</td>
+        <td class="muted">{% for debt_id in row.plan.order %}{{ names[debt_id] }}{% if not loop.last %} &rarr; {% endif %}{% endfor %}</td>
+        {% else %}
+        <td colspan="5" class="bad">Never pays off: a payment is below its monthly interest.</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Your monthly debt budget stays fixed: every loan's payment plus all extra money. When a
+    loan is paid off, its payment rolls into the next one. Each loan gets its minimum first. A loan with
+    a <strong>promo deadline</strong> is then funded at the pace that clears it in time, whatever its APR
+    says, since a balance left at the deadline can be charged interest on the whole purchase. Only then
+    does the rest follow the strategy, including all of it going to a loan with no minimum. Avalanche
+    pays the least interest; snowball clears individual loans sooner.</p>
+</section>
+{% endif %}
+
+<details class="adder" {% if not rows %}open{% endif %}>
+  <summary>Add a loan</summary>
+  <div class="panel">
+  <form method="post" action="{{ url_for('loans.create') }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Name <input name="name" required maxlength="100" placeholder="e.g. Student loan"></label>
+    <label>Lender <input name="institution" maxlength="100"></label>
+    <label>Current balance <input name="balance" inputmode="decimal" required></label>
+    <label>APR % <input name="apr" inputmode="decimal" required placeholder="e.g. 5.25"></label>
+    <label>Monthly payment <input name="min_payment" inputmode="decimal"></label>
+    <label>Extra monthly payment <input name="extra_payment" inputmode="decimal" placeholder="0.00"></label>
+    <label>Minimum payment
+      <select name="min_rule">
+        {% for key, label in min_rules.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Minimum % of balance <input name="min_percent" inputmode="decimal" placeholder="e.g. 3"></label>
+    <label>Payment day of month <input type="number" name="payment_day" min="1" max="31"></label>
+    <label>Original amount <input name="original_principal" inputmode="decimal" placeholder="optional"></label>
+    <label>Term (months) <input type="number" name="term_months" min="1" max="1200" placeholder="optional"></label>
+    <label>Start date <input type="date" name="start_date"></label>
+    <label>Promo ends <input type="date" name="promo_ends_on"></label>
+    <button type="submit">Add loan</button>
+  </form>
+  </div>
+</details>
+{% endblock %}

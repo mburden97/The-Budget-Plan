@@ -1,0 +1,22 @@
+{# Upload a new version of a document, or start a new one. Shared by home and Documents. #}
+{% macro upload_form(documents, suggestions, next_url, compact=false) -%}
+<form method="post" action="{{ url_for('documents.upload') }}" enctype="multipart/form-data" class="inline upload-row">
+  {{ csrf_field() }}
+  <input type="hidden" name="next" value="{{ next_url }}">
+  {% if documents %}
+  <label>Update
+    <select name="document_id">
+      {% for d in documents %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>or start
+    <input name="name" list="doc-names" placeholder="new document" maxlength="80" size="18"></label>
+  {% else %}
+  <label>Document
+    <input name="name" list="doc-names" placeholder="Renters insurance policy" maxlength="80" required></label>
+  {% endif %}
+  <label class="file">File <input type="file" name="file" required></label>
+  <button type="submit">Upload</button>
+</form>
+<datalist id="doc-names">{% for s in suggestions %}<option value="{{ s }}"></option>{% endfor %}</datalist>
+{%- endmacro %}

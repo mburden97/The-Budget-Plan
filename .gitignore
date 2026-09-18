@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------
+# Financial data: NEVER commit. The vault is encrypted, but it
+# still does not belong in version control.
+# ---------------------------------------------------------------
+data/
+private/
+*.vault
+*.vault.tmp
+
+# Raw exports / seed spreadsheets (safety net; allow-list test fixtures explicitly)
+*.csv
+*.tsv
+*.xlsx
+*.xlsm
+*.xls
+*.ods
+*.ofx
+*.qfx
+*.qif
+*.pdf
+!tests/fixtures/**
+
+# Personal pictures shown in the UI (third-party images, not part of the app)
+src/budgetapp/web/static/avatar.gif
+src/budgetapp/web/static/logo.png
+src/budgetapp/web/static/home-bg.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS / OneDrive / Office lock files
+.vscode/
+.idea/
+desktop.ini
+Thumbs.db
+.DS_Store
+~$*

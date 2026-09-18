@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Budget plan · Budget{% endblock %}
+
+{% macro frequency_select(form_id, selected) %}
+<select form="{{ form_id }}" name="frequency" aria-label="Frequency">
+  {% for key, (label, _) in frequencies.items() %}
+  <option value="{{ key }}" {% if key == selected %}selected{% endif %}>{{ label }}</option>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% block content %}
+<nav class="tabs">
+  <a class="active" aria-current="page" href="{{ url_for('budget.index') }}">Plan</a>
+  <a href="{{ url_for('budget.actual') }}">Actual</a>
+  <a href="{{ url_for('budget.subscriptions') }}">Subscriptions</a>
+</nav>
+<section class="summary">
+  <div class="stat"><span class="label">Monthly income</span><span class="value">{{ summary.income_cents|money }}</span></div>
+  <div class="stat"><span class="label">Expenses</span><span class="value">{{ summary.expense_cents|money }}</span></div>
+  <div class="stat"><span class="label">Savings &amp; investing</span><span class="value">{{ summary.savings_cents|money }}</span></div>
+  <div class="stat"><span class="label">Debt payments</span><span class="value">{{ summary.debt_cents|money }}</span></div>
+  {% set left = summary.unallocated_cents %}
+  <div class="stat {{ 'good' if left == 0 else ('bad' if left < 0 else 'warn') }}">
+    <span class="label">Left to assign</span><span class="value">{{ left|money }}</span>
+  </div>
+  <div class="stat">
+    <span class="label">Savings rate</span>
+    <span class="value">{% if summary.savings_rate is not none %}{{ '%.1f'|format(summary.savings_rate * 100) }}%{% else %}&ndash;{% endif %}</span>
+  </div>
+  {% if mode == 'two_paycheck' and summary.extra_income_per_year_cents %}
+  <div class="stat {{ 'good' if summary.windfall_per_year_cents > 0 else 'warn' }}">
+    <span class="label">3rd-paycheck windfalls / year</span>
+    <span class="value">{{ summary.windfall_per_year_cents|money }}</span>
+    <span class="muted small">{{ summary.extra_income_per_year_cents|money }} extra pay &minus; {{ summary.extra_outflow_per_year_cents|money }} extra-week bills</span>
+  </div>
+  {% endif %}
+</section>
+<p class="hint spaced">
+  {% if mode == 'two_paycheck' %}Two-paycheck month: bi-weekly lines count &times;2, weekly &times;4; 3rd paychecks are windfalls.
+  {% else %}Average month: every line is averaged over the year.{% endif %}
+  <a href="{{ url_for('settings.index') }}">Change</a> · Click any value to edit it, then Save.
+</p>
+
+{% for group in groups %}
+{% set cat = group.category %}
+<section class="panel">
+  <header class="panel-head">
+    <h2>{{ cat.name }} <span class="badge kind-{{ cat.kind }}">{{ kinds[cat.kind] }}</span></h2>
+    {% if cat.kind != 'income' %}
+    <form method="post" action="{{ url_for('budget.toggle_essential', category_id=cat.id) }}"
+          title="Essential categories set the emergency-fund target">
+      {{ csrf_field() }}
+      <input type="hidden" name="essential" value="{{ 0 if cat.essential else 1 }}">
+      <button type="submit" class="link {{ '' if cat.essential else 'muted' }}">{{ 'Essential ✓' if cat.essential else 'Mark essential' }}</button>
+    </form>
+    {% endif %}
+    <span class="subtotal">{{ group.monthly_cents|money }}/mo</span>
+    {% if not group.items %}
+    <form method="post" action="{{ url_for('budget.delete_category', category_id=cat.id) }}"
+          data-confirm="Delete the empty category “{{ cat.name }}”?">
+      {{ csrf_field() }}
+      <button type="submit" class="link danger">Delete category</button>
+    </form>
+    {% endif %}
+  </header>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr>
+        <th>Item</th><th class="num">Amount</th><th>Frequency</th><th class="num">Monthly</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in group.items %}
+      {% set fid = "item-" ~ item.id %}
+      <tr>
+        <td>
+          <input form="{{ fid }}" name="name" value="{{ item.name }}" required maxlength="100" aria-label="Name">
+          {% if item.notes %}<div class="muted small cell-note">{{ item.notes }}</div>{% endif %}
+        </td>
+        <td class="num"><input form="{{ fid }}" name="amount" value="{{ item.amount_cents|money_input }}" required inputmode="decimal" class="amount" aria-label="Amount"></td>
+        <td>{{ frequency_select(fid, item.frequency) }}</td>
+        <td class="num">{{ item.monthly_cents|money }}</td>
+        <td class="actions">
+          <form id="{{ fid }}" method="post" action="{{ url_for('budget.update_item', item_id=item.id) }}">
+            {{ csrf_field() }}
+            <input type="hidden" name="category_id" value="{{ item.category_id }}">
+            <input type="hidden" name="notes" value="{{ item.notes }}">
+            <button type="submit">Save</button>
+          </form>
+          <form method="post" action="{{ url_for('budget.delete_item', item_id=item.id) }}"
+                data-confirm="Delete “{{ item.name }}”?">
+            {{ csrf_field() }}<button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      {% set aid = "add-" ~ cat.id %}
+      <tr class="add-row">
+        <td><input form="{{ aid }}" name="name" placeholder="New item" required maxlength="100" aria-label="New item name"></td>
+        <td class="num"><input form="{{ aid }}" name="amount" placeholder="0.00" required inputmode="decimal" class="amount" aria-label="New item amount"></td>
+        <td>{{ frequency_select(aid, "monthly") }}</td>
+        <td></td>
+        <td class="actions">
+          <form id="{{ aid }}" method="post" action="{{ url_for('budget.add_item') }}">
+            {{ csrf_field() }}
+            <input type="hidden" name="category_id" value="{{ cat.id }}">
+            <button type="submit">Add</button>
+          </form>
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+</section>
+{% endfor %}
+
+<details class="adder">
+  <summary>Add a category</summary>
+  <div class="panel">
+  <form method="post" action="{{ url_for('budget.add_category') }}" class="inline">
+    {{ csrf_field() }}
+    <input name="name" required maxlength="60" placeholder="e.g. Irregular / annual" aria-label="Category name">
+    <select name="kind" aria-label="Category type">
+      {% for key, label in kinds.items() %}
+      <option value="{{ key }}" {% if key == 'expense' %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Add category</button>
+  </form>
+  </div>
+</details>
+{% endblock %}

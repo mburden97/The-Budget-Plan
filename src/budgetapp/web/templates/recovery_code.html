@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Recovery code · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow recovery-sheet">
+  <h1>Your recovery code</h1>
+  <p class="recovery-code">{{ code }}</p>
+  <p>This code opens your budget vault if you ever lose your passphrase.
+    <strong>It's shown only this once</strong>: the app keeps no readable copy.</p>
+  <ul>
+    <li>Print this page or write the code down, and keep it somewhere physical and safe.</li>
+    <li>Don't save it in OneDrive, next to the vault, or in the same password manager as your passphrase.</li>
+    <li>Anyone with this code can open your budget. Making a new code in Settings cancels this one.</li>
+  </ul>
+  <p class="print-only">The Budget Plan recovery code, created {{ today }}.</p>
+  <div class="form-actions no-print">
+    <button type="button" class="secondary" data-print>Print</button>
+    <a class="button" href="{{ url_for('settings.index', _anchor='recovery') }}">I've saved it</a>
+  </div>
+  <p class="hint no-print">Created {{ today }}. Refreshing this page would make a new code and cancel this one.</p>
+</section>
+{% endblock %}

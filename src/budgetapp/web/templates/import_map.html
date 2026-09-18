@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Choose columns · Import · Budget{% endblock %}
+
+{% macro column_select(name, label, selected, optional=false) %}
+<label>{{ label }}
+  <select name="{{ name }}">
+    {% if optional %}<option value="">(none)</option>{% endif %}
+    {% for header in parsed.headers %}
+    <option value="{{ loop.index0 }}" {% if loop.index0 == selected %}selected{% endif %}>{{ header }}</option>
+    {% endfor %}
+  </select>
+</label>
+{% endmacro %}
+
+{% block content %}
+<a class="back" href="{{ url_for('transactions.import_form') }}">&larr; Start over</a>
+<h1>{{ filename }} <span class="muted">&rarr; {{ account.name }}</span></h1>
+<p class="muted">{{ parsed.rows|length }} rows found.{% if remembered %} Using the columns saved for this account.{% endif %}</p>
+
+{% if is_ofx %}
+<div class="flash flash-info">Read from an OFX file: the columns are standard, so they're set for you.
+  Each transaction's bank id is used to skip anything already imported.</div>
+{% endif %}
+{% if flip_suggested %}
+<div class="flash flash-info">Most amounts in this card export are positive, so <strong>Flip signs</strong>
+  is ticked: purchases will be recorded as money out. Check the preview below.</div>
+{% endif %}
+<section class="panel">
+  <h2>Columns</h2>
+  <form method="post" action="{{ url_for('transactions.run_import', token=token) }}" class="grid-form">
+    {{ csrf_field() }}
+    {{ column_select('date_col', 'Date', mapping.date_col) }}
+    {{ column_select('description_col', 'Description', mapping.description_col) }}
+    {{ column_select('amount_col', 'Amount (signed)', mapping.amount_col, true) }}
+    {{ column_select('debit_col', 'or Debit column', mapping.debit_col, true) }}
+    {{ column_select('credit_col', 'and Credit column', mapping.credit_col, true) }}
+    {{ column_select('category_col', 'Bank category (optional)', mapping.category_col, true) }}
+    {{ column_select('id_col', 'Transaction ID (optional)', mapping.id_col, true) }}
+    <label>Date format
+      <select name="date_format">
+        {% for key, label in date_formats.items() %}
+        <option value="{{ key }}" {% if key == mapping.date_format %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="flip_sign" {% if mapping.flip_sign %}checked{% endif %}> Flip signs (purchases show as positive)</label>
+    <div class="form-actions wide">
+      <button type="submit" name="action" value="preview" class="secondary">Update preview</button>
+      <button type="submit" name="action" value="import">Import {{ parsed.rows|length }} rows</button>
+    </div>
+  </form>
+  {% if date_note %}<p class="hint"><strong>Dates:</strong> {{ date_note }}</p>{% endif %}
+  <p class="hint">Check the preview: spending should be negative and deposits positive. If purchases
+    show as positive (common for credit cards), tick "Flip signs". Amounts marked CR count as money
+    in, and DR or a trailing minus as money out. A <strong>Transaction ID</strong> column, if the
+    file has one that is unique per transaction, makes re-imports exact.</p>
+</section>
+
+<section class="panel">
+  <h2>Preview (first rows)</h2>
+  {% if problems %}
+  <div class="flash flash-warn">{{ problems|length }} of these rows can't be read: {{ problems|join('; ') }}</div>
+  {% endif %}
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+      {% for row in preview %}
+      <tr><td>{{ row.posted_on }}</td><td>{{ row.description }}</td>
+        <td class="num {{ 'good' if row.amount_cents > 0 }}">{{ row.amount_cents|money }}</td></tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No rows could be read with these columns.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <details>
+    <summary>Raw file (first rows)</summary>
+    <div class="table-wrap">
+    <table class="items">
+      <thead><tr>{% for h in parsed.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in parsed.rows[:8] %}
+        <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</section>
+{% endblock %}

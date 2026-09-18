@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Spending trends · Budget{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Spending trends</h1>
+  <nav class="pills push-right" aria-label="Range">
+    {% for r in ranges %}
+    <a class="pill {{ 'active' if r == months }}" href="{{ url_for('trends.index', months=r, by=by, **options.keep) }}">{{ r }} months</a>
+    {% endfor %}
+  </nav>
+  <nav class="pills" aria-label="Grouping">
+    {% for key, label in groupings.items() %}
+    <a class="pill {{ 'active' if key == by }}" href="{{ url_for('trends.index', months=months, by=key, **options.keep) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+</header>
+<p class="hint spaced">Complete months only: {{ result.months[0]|month_label }} to {{ result.months[-1]|month_label }}.
+  Spending includes savings and debt payments; transfers marked "not budgeted" are left out.
+  This month so far is on <a href="{{ url_for('budget.actual') }}">Budget &rarr; Actual</a>.</p>
+
+<section class="summary">
+  <div class="stat"><span class="label">Average spent / month</span><span class="value">{{ avg_spent|money }}</span></div>
+  <div class="stat"><span class="label">Average income / month</span><span class="value">{{ avg_income|money }}</span></div>
+  {% set top = result.series[0] if result.series else none %}
+  <div class="stat"><span class="label">Biggest {{ 'category' if by == 'category' else 'line' }}</span>
+    <span class="value small">{{ top.label if top else '–' }}</span>
+    {% if top %}<span class="muted small">{{ top.average|money }} / month</span>{% endif %}</div>
+  <div class="stat"><span class="label">Last month</span><span class="value">{{ totals[-1]|money }}</span></div>
+</section>
+
+<section class="panel">
+  <h2>Monthly spending</h2>
+  {% if chart %}
+  {{ chart }}
+  <div class="legend-row">
+    {% for name, i in legend %}<span><span class="swatch series-{{ i }}"></span>{{ name }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No categorized spending in this range yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>By {{ 'category' if by == 'category' else 'budget line' }}</h2>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>{{ 'Category' if by == 'category' else 'Budget line' }}</th><th>Trend</th>
+          <th class="num">Avg / month</th><th class="num">Last month</th>
+          <th class="num" title="Last 3 months vs the 3 before">3-month change</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      {% for s, spark, color in rows %}
+      <tr>
+        <td>{% if color is not none %}<span class="swatch series-{{ color }}"></span>{% endif %}{{ s.label }}</td>
+        <td>{{ spark }}</td>
+        <td class="num">{{ s.average|money }}</td>
+        <td class="num">{{ s.values[-1]|money }}</td>
+        <td class="num {{ 'bad' if s.change is not none and s.change > 0.1 else ('good' if s.change is not none and s.change < -0.1) }}">
+          {% if s.change is not none %}{{ '+' if s.change > 0 }}{{ s.change|percent(0) }}{% else %}–{% endif %}</td>
+        <td class="num">{{ s.total|money }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Nothing to show yet.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr class="total-row">
+        <td>Total</td><td>{{ total_spark }}</td>
+        <td class="num">{{ avg_spent|money }}</td><td class="num">{{ totals[-1]|money }}</td>
+        <td></td><td class="num">{{ totals|sum|money }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  </div>
+</section>
+
+<section class="panel" id="projection">
+  {% set p0, pN = projected.start, projected.end %}
+  <header class="panel-head">
+    <h2>Projected net worth</h2>
+    <span class="push-right pill-label">{{ pN.net_cents|money }} by {{ pN.when|month_label }}</span>
+  </header>
+  <form method="get" action="{{ url_for('trends.index', _anchor='projection') }}" class="inline">
+    <input type="hidden" name="months" value="{{ months }}">
+    <input type="hidden" name="by" value="{{ by }}">
+    <input type="hidden" name="p" value="1">
+    <label>Years
+      <select name="years">
+        {% for y in year_options %}<option value="{{ y }}" {{ 'selected' if y == options.years }}>{{ y }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Investments grow
+      <input name="growth" value="{{ options.growth_input }}" inputmode="decimal" class="narrow" aria-label="Investment growth, percent a year">
+      % a year</label>
+    <label class="inline-check"><input type="checkbox" name="windfalls" value="1" {{ 'checked' if options.windfalls }}> Count 3rd paychecks</label>
+    <label class="inline-check"><input type="checkbox" name="payoffs" value="1" {{ 'checked' if options.payoffs }}> Save paid-off loan payments</label>
+    <button type="submit" class="secondary">Update</button>
+  </form>
+
+  <section class="summary">
+    <div class="stat"><span class="label">Net worth today</span><span class="value">{{ p0.net_cents|money }}</span></div>
+    <div class="stat {{ 'good' if pN.net_cents > p0.net_cents }}">
+      <span class="label">In {{ options.years }} year{{ '' if options.years == 1 else 's' }}</span>
+      <span class="value">{{ pN.net_cents|money }}</span></div>
+    <div class="stat"><span class="label">Average change / month</span>
+      <span class="value">{{ ((pN.net_cents - p0.net_cents) / (projected.points|length - 1))|round|int|money }}</span></div>
+    <div class="stat"><span class="label">Debt-free</span>
+      <span class="value small">{% if projected.debt_free %}{{ projected.debt_free|month_label }}{% elif projected.stuck %}–{% else %}No loans owing{% endif %}</span>
+      {% if projected.positive %}<span class="small good">Net worth above $0 by {{ projected.positive|month_label }}</span>{% endif %}</div>
+  </section>
+
+  {{ projection_chart }}
+
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>When</th><th class="num">Cash</th><th class="num">Investments</th>
+      <th class="num">Other assets</th><th class="num">Debts</th><th class="num">Net worth</th></tr></thead>
+    <tbody>
+      {% for p in milestones %}
+      <tr>
+        <td>{{ 'Today' if loop.first else p.when|month_label }}</td>
+        <td class="num">{{ p.cash_cents|money }}</td>
+        <td class="num">{{ p.invested_cents|money }}</td>
+        <td class="num">{{ p.other_assets_cents|money }}</td>
+        <td class="num">{{ p.debt_cents|money }}</td>
+        <td class="num {{ 'bad' if p.net_cents < 0 }}"><strong>{{ p.net_cents|money }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">Assumes you follow today's budget plan: {{ projected.to_cash_cents|money }}/mo saved as cash{% if projected.savings_account %}
+    in {{ projected.savings_account }}{% if projected.savings_apy %} at {{ projected.savings_apy|percent(1) }} APY{% endif %}{% endif %},
+    and {{ projected.to_invest_cents|money }}/mo invested, growing {{ projected.growth|percent(1) }} a year in price{% if not projected.growth %}
+    (no market growth assumed; enter your own rate above){% endif %}{% if projected.dividend_yield %},
+    plus {{ projected.dividend_yield|percent(2) }} a year of reinvested dividends{% endif %}{% if projected.payout_yield %}
+    ({{ projected.payout_yield|percent(2) }} a year of dividends is taken as cash){% endif %}.
+    {% if projected.unassigned_cents %}Left to assign ({{ projected.unassigned_cents|money }}/mo) is counted as cash
+    {{ 'saved' if projected.unassigned_cents > 0 else 'spent, since the plan assigns more than it earns' }},
+    so changing your income moves this straight away.{% endif %}
+    Loans follow their payment schedules on the Loans page{% if options.payoffs %},
+    and once one is paid off its payment is saved and invested in the same split as your plan{% endif %}.
+    {% if projected.windfall_cents %}The 3rd-paycheck months add about {{ projected.windfall_cents|money }}/mo.{% endif %}
+    Card balances and other assets stay where they are; pay changes and market swings aren't predicted.
+    {% if projected.stuck %}Held at today's balance because the payment doesn't cover the interest: {{ projected.stuck|join(', ') }}.{% endif %}</p>
+</section>
+{% endblock %}

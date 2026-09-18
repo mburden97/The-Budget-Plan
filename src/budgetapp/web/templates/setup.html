@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Create vault · Budget{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Create your vault</h1>
+  <p>Your budget is stored in one encrypted file. A passphrase is the only way to open it.
+    <strong>There is no reset or recovery</strong>, so store it in your password manager.</p>
+  <form method="post" action="{{ url_for('auth.setup_post') }}" class="stack">
+    {{ csrf_field() }}
+    <label>Passphrase
+      <input type="password" name="passphrase" minlength="{{ min_length }}" {% if not allow_blank %}required{% endif %} autofocus autocomplete="new-password">
+    </label>
+    <label>Confirm passphrase
+      <input type="password" name="confirm" minlength="{{ min_length }}" {% if not allow_blank %}required{% endif %} autocomplete="new-password">
+    </label>
+    <p class="hint">At least {{ min_length }} characters. Four or five random words is a good choice.
+      {% if allow_blank %}<br><strong>For now you can leave both blank</strong>: the app will open
+      without asking, and you can add a passphrase later in Settings.{% endif %}</p>
+    <button type="submit">Create vault</button>
+  </form>
+</section>
+{% endblock %}

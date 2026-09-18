@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Goals · Budget{% endblock %}
+
+{% macro line_select(form_id, selected) %}
+<select form="{{ form_id }}" name="line_item_id" aria-label="Budget line">
+  <option value="">(none)</option>
+  {% for g in groups if g.items and g.category.kind != 'income' %}
+  <optgroup label="{{ g.category.name }}">
+    {% for i in g.items %}
+    <option value="{{ i.id }}" {% if i.id == selected %}selected{% endif %}>{{ i.name }}</option>
+    {% endfor %}
+  </optgroup>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% block content %}
+<h1>Goals</h1>
+
+<section class="panel">
+  <h2>Emergency fund</h2>
+  <div class="summary">
+    <div class="stat"><span class="label">Saved</span><span class="value">{{ ef.saved_cents|money }}</span>
+      {% if ef.set_aside_cents %}<span class="muted small">{{ ef.held_cents|money }} held − {{ ef.set_aside_cents|money }} for sinking funds</span>{% endif %}</div>
+    <div class="stat"><span class="label">Essential expenses / mo</span><span class="value">{{ ef.essential_monthly_cents|money }}</span></div>
+    {% set covered = ef.months_covered %}
+    <div class="stat {{ 'good' if covered is not none and covered >= ef.target_months else 'warn' }}">
+      <span class="label">Months covered (target {{ ef.target_months }})</span>
+      <span class="value">{{ '%.1f'|format(covered) if covered is not none else '–' }}</span>
+    </div>
+    <div class="stat"><span class="label">Still to save</span><span class="value">{{ ef.shortfall_cents|money }}</span></div>
+    {% if ef.monthly_interest_cents %}
+    <div class="stat good"><span class="label">Interest earned / mo</span><span class="value">{{ ef.monthly_interest_cents|money }}</span></div>
+    {% endif %}
+  </div>
+  <progress max="1" value="{{ ef.progress }}" aria-label="Emergency fund progress"></progress>
+  <p class="hint">
+    <strong>Saved</strong> is the balance of accounts marked “Part of emergency fund”
+    ({{ ef.accounts|join(', ') if ef.accounts else 'none yet: open an account on the Net worth page and tick the box' }}),
+    minus what your sinking funds below have saved, since that money sits in the same account and is spoken for.
+    <strong>Essential expenses</strong> are budget categories marked Essential on the
+    <a href="{{ url_for('budget.index') }}">Budget</a> page. Change the target in
+    <a href="{{ url_for('settings.index') }}">Settings</a>.
+  </p>
+</section>
+
+<section class="panel">
+  <h2>Sinking funds</h2>
+  <p class="hint">Set money aside each month for big irregular bills (insurance, registration, holidays,
+    car repairs). Link a fund to its budget line to check you're saving enough to hit the target by the due date.</p>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>Fund</th><th class="num">Target</th><th>Due</th><th class="num">Saved</th><th>Budget line</th>
+          <th class="num">Need / mo</th><th class="progress-col">Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for f in funds %}
+      {% set fid = "fund-" ~ f.id %}
+      {% set need = f.needed_monthly_cents(today) %}
+      {% set ok = f.on_track(today) %}
+      <tr>
+        <td><input form="{{ fid }}" name="name" value="{{ f.name }}" required maxlength="100" aria-label="Name"></td>
+        <td class="num"><input form="{{ fid }}" name="target" value="{{ f.target_cents|money_input }}" required inputmode="decimal" class="amount" aria-label="Target"></td>
+        <td><input form="{{ fid }}" type="date" name="due_date" value="{{ f.due_date or '' }}" aria-label="Due date"></td>
+        <td class="num"><input form="{{ fid }}" name="saved" value="{{ f.saved_cents|money_input }}" inputmode="decimal" class="amount" aria-label="Saved"></td>
+        <td>{{ line_select(fid, f.line_item_id) }}</td>
+        <td class="num">{{ need|money if need is not none else '–' }}{% if f.budgeted_monthly_cents is not none %}<br><span class="muted small">budget {{ f.budgeted_monthly_cents|money }}</span>{% endif %}</td>
+        <td>
+          <progress max="1" value="{{ f.progress }}" aria-label="{{ f.name }} progress"></progress><br>
+          <span class="small {{ 'good' if ok else ('bad' if ok == false else 'muted') }}">
+            {% if f.remaining_cents == 0 %}Funded{% elif ok %}On track{% elif ok == false %}Behind{% elif f.due_date %}{{ f.months_left(today) }} mo left{% else %}No due date{% endif %}
+          </span>
+        </td>
+        <td class="actions">
+          <form id="{{ fid }}" method="post" action="{{ url_for('goals.update_fund', fund_id=f.id) }}">
+            {{ csrf_field() }}<button type="submit">Save</button>
+          </form>
+          <form method="post" action="{{ url_for('goals.delete_fund', fund_id=f.id) }}" data-confirm="Delete the “{{ f.name }}” fund?">
+            {{ csrf_field() }}<button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">No sinking funds yet. Add one below.</td></tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="add-row">
+        <td><input form="fund-new" name="name" placeholder="e.g. Car insurance" required maxlength="100" aria-label="New fund name"></td>
+        <td class="num"><input form="fund-new" name="target" placeholder="0.00" required inputmode="decimal" class="amount" aria-label="New fund target"></td>
+        <td><input form="fund-new" type="date" name="due_date" aria-label="New fund due date"></td>
+        <td class="num"><input form="fund-new" name="saved" placeholder="0.00" inputmode="decimal" class="amount" aria-label="Already saved"></td>
+        <td>{{ line_select("fund-new", none) }}</td>
+        <td></td><td></td>
+        <td class="actions">
+          <form id="fund-new" method="post" action="{{ url_for('goals.add_fund') }}">
+            {{ csrf_field() }}<button type="submit">Add</button>
+          </form>
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+</section>
+{% endblock %}

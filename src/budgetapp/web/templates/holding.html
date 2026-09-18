@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ holding.symbol }} · Brokerage · Budget{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('brokerage.index') }}">&larr; Brokerage</a>
+<h1>{{ holding.symbol }} <span class="muted">· {{ holding.account_name }}</span></h1>
+
+<section class="panel">
+  <form method="post" action="{{ url_for('brokerage.update_holding', holding_id=holding.id) }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Symbol <input name="symbol" value="{{ holding.symbol }}" required maxlength="20"></label>
+    <label>Name <input name="name" value="{{ holding.name }}" maxlength="100"></label>
+    <label>Shares / units <input name="shares" value="{{ holding.shares }}" inputmode="decimal" required></label>
+    <label>Asset class
+      <select name="asset_class">
+        {% for key, label in asset_classes.items() %}
+        <option value="{{ key }}" {% if key == holding.asset_class %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Price source
+      <select name="quote_source">
+        {% for key, label in quote_sources.items() %}
+        <option value="{{ key }}" {% if key == holding.quote_source %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Price lookup id <input name="quote_id" value="{{ holding.quote_id }}" maxlength="60" placeholder="auto"></label>
+    <label>Cost basis (total) <input name="cost_basis" value="{{ holding.cost_basis_cents|money_input if holding.cost_basis_cents is not none else '' }}" inputmode="decimal"></label>
+    <label>Price <input name="price" inputmode="decimal" placeholder="{{ holding.last_price if holding.last_price is not none else '' }}"></label>
+    <label>Dividend yield % / yr <input name="dividend_yield" value="{{ holding.dividend_yield|percent_input if holding.dividend_yield is not none else '' }}" inputmode="decimal" placeholder="e.g. 1.25"></label>
+    <label class="check"><input type="checkbox" name="reinvest" value="1" {% if holding.reinvest %}checked{% endif %}> Dividends reinvested</label>
+    <button type="submit">Save</button>
+  </form>
+  <p class="hint">
+    <strong>Price lookup id</strong> overrides the symbol sent to the price service: a CoinGecko coin id
+    for crypto (found automatically, e.g. <code>bitcoin</code>) or a Yahoo symbol for stocks
+    (e.g. <code>BRK-B</code>). Entering a <strong>price</strong> sets it now; the next refresh replaces
+    it unless the source is "Manual price".
+    <strong>Dividend yield</strong> {% if holding.dividend_source and holding.dividend_source != 'manual' %}came from
+    {{ holding.dividend_source }}{% if holding.dividend_as_of %} on {{ holding.dividend_as_of }}{% endif %}; type your own to
+    override it. It {% endif %}is what this holding pays in a year, as a percent of its value{% if holding.annual_dividend_cents is not none %} (about {{ holding.annual_dividend_cents|money }} a year at today's value){% endif %}.
+    Reinvested dividends compound in the Trends projection; otherwise they are projected as cash.
+    Either way your broker buys the shares, so update the share count here after a few dividends.
+  </p>
+  <form method="post" action="{{ url_for('brokerage.delete_holding', holding_id=holding.id) }}"
+        data-confirm="Remove {{ holding.symbol }} from {{ holding.account_name }}?">
+    {{ csrf_field() }}<button type="submit" class="danger">Delete holding</button>
+  </form>
+</section>
+{% endblock %}

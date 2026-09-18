@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Brokerage · Budget{% endblock %}
+{% block content %}
+<section class="summary">
+  <div class="stat"><span class="label">Total value</span><span class="value">{{ total_value|money }}</span></div>
+  <div class="stat"><span class="label">Cost basis</span><span class="value">{{ total_cost|money }}</span></div>
+  <div class="stat {{ 'good' if total_gain > 0 else ('bad' if total_gain < 0 else '') }}">
+    <span class="label">Gain / loss</span><span class="value">{{ total_gain|money }}</span>
+  </div>
+  <div class="stat"><span class="label">Dividends / year</span><span class="value">{{ dividends.total_cents|money }}</span>
+    <span class="muted small">{{ dividends.reinvested_cents|money }} reinvested{% if dividends.paid_out_cents %} · {{ dividends.paid_out_cents|money }} as cash{% endif %}</span></div>
+  <div class="stat"><span class="label">Prices updated</span><span class="value small">{{ refreshed or 'never' }}</span>
+    <span class="muted small">Yields: {{ dividends_refreshed or 'never looked up' }}</span></div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2>Holdings</h2>
+    <form method="post" action="{{ url_for('brokerage.refresh') }}" class="push-right">
+      {{ csrf_field() }}<button type="submit">Refresh prices</button>
+    </form>
+    <form method="post" action="{{ url_for('brokerage.refresh_dividends') }}" class="inline">
+      {{ csrf_field() }}
+      <label class="inline-check" title="Otherwise yields you typed yourself are left alone">
+        <input type="checkbox" name="replace" value="1"> replace mine</label>
+      <button type="submit" class="secondary">Refresh dividend yields</button>
+    </form>
+  </header>
+  <p class="hint">Refreshing sends only ticker symbols to Yahoo Finance and CoinGecko (and Finnhub /
+    Alpha Vantage if you add keys in <a href="{{ url_for('settings.index') }}">Settings</a>).
+    Amounts and account details never leave this computer.
+    <strong>Refresh dividend yields</strong> adds up what each holding actually paid over the last
+    year and divides by today's price; it skips yields you typed in yourself unless you tick
+    <em>replace mine</em>.</p>
+  {% if unpriced %}
+  <div class="flash flash-warn">No price yet for {{ unpriced|map(attribute='symbol')|join(', ') }}; they count as $0 until refreshed.</div>
+  {% endif %}
+
+  {% for account, items in groups %}
+  <h3>
+    <a href="{{ url_for('networth.account', account_id=account.id) }}">{{ account.name }}</a>
+    <span class="badge">{{ account.type_label }}</span>
+    <span class="subtotal">{{ (account.balance_cents or 0)|money }}</span>
+  </h3>
+  <div class="table-wrap">
+  <table class="items">
+    <thead>
+      <tr><th>Symbol</th><th>Name</th><th>Class</th><th class="num">Shares</th><th class="num">Price</th>
+          <th class="num">Value</th><th class="num">Cost basis</th><th class="num">Gain</th><th class="num">Dividends / yr</th></tr>
+    </thead>
+    <tbody>
+      {% for h in items %}
+      <tr>
+        <td><a href="{{ url_for('brokerage.holding', holding_id=h.id) }}">{{ h.symbol }}</a></td>
+        <td>{{ h.name }}</td>
+        <td class="muted">{{ asset_classes[h.asset_class] }}</td>
+        <td class="num">{{ h.shares|quantity }}</td>
+        <td class="num">{% if h.last_price is not none %}{{ '{:,.2f}'.format(h.last_price) if h.last_price >= 1 else h.last_price|quantity }}<br><span class="muted small">{{ h.price_as_of }}</span>{% else %}–{% endif %}</td>
+        <td class="num">{{ h.value_cents|money if h.value_cents is not none else '–' }}</td>
+        <td class="num">{{ h.cost_basis_cents|money if h.cost_basis_cents is not none else '–' }}</td>
+        <td class="num {{ 'good' if (h.gain_cents or 0) > 0 else ('bad' if (h.gain_cents or 0) < 0 else '') }}">{{ h.gain_cents|money if h.gain_cents is not none else '–' }}</td>
+        <td class="num">{% if h.annual_dividend_cents is not none %}{{ h.annual_dividend_cents|money }}<br><span class="muted small">{{ h.dividend_yield|percent(2) }}{{ ' reinvested' if h.reinvest else ' as cash' }}{% if h.dividend_source and h.dividend_source != 'manual' %} · {{ h.dividend_source }}{% endif %}</span>{% else %}–{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No holdings in this account yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endfor %}
+
+  {% if accounts %}
+  <details class="adder">
+  <summary>Add a holding</summary>
+  <form method="post" action="{{ url_for('brokerage.add_holding') }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Account
+      <select name="account_id" required>
+        {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Symbol <input name="symbol" required maxlength="20" placeholder="VTI, BTC, CASH"></label>
+    <label>Name <input name="name" maxlength="100" placeholder="optional"></label>
+    <label>Shares / units <input name="shares" inputmode="decimal" required></label>
+    <label>Asset class
+      <select name="asset_class">
+        {% for key, label in asset_classes.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Price source
+      <select name="quote_source">
+        {% for key, label in quote_sources.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Cost basis (total) <input name="cost_basis" inputmode="decimal" placeholder="optional"></label>
+    <label>Price <input name="price" inputmode="decimal" placeholder="manual only"></label>
+    <label>Dividend yield % / yr <input name="dividend_yield" inputmode="decimal" placeholder="e.g. 1.25"></label>
+    <label class="check"><input type="checkbox" name="reinvest" value="1" checked> Dividends reinvested</label>
+    <button type="submit">Add holding</button>
+  </form>
+  <p class="hint">Cash or a money-market sweep: symbol CASH, class "Cash", source "Manual price", shares = dollars.
+    A <strong>dividend yield</strong> lets the net-worth projection on
+    <a href="{{ url_for('trends.index') }}">Trends</a> compound reinvested dividends instead of price growth alone.
+    Reinvested dividends buy shares at your broker, so update the share count here now and then.</p>
+  </details>
+  {% else %}
+  <p class="muted">Add a brokerage, retirement or crypto account below to start tracking holdings.</p>
+  {% endif %}
+</section>
+
+<details class="adder" {% if not accounts %}open{% endif %}>
+  <summary>Add an investment account</summary>
+  <div class="panel">
+  <form method="post" action="{{ url_for('networth.add_account') }}" class="grid-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="brokerage">
+    <label>Name <input name="name" required maxlength="100" placeholder="e.g. Fidelity Roth IRA"></label>
+    <label>Type
+      <select name="type">
+        {% for key, label in investment_types.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Institution <input name="institution" maxlength="100"></label>
+    <button type="submit">Add account</button>
+  </form>
+  </div>
+</details>
+
+<section class="panel">
+  <h2>Allocation</h2>
+  <form method="post" action="{{ url_for('brokerage.targets') }}" id="targets">{{ csrf_field() }}</form>
+  <div class="table-wrap">
+  <table class="items">
+    <thead><tr><th>Asset class</th><th class="num">Value</th><th class="num">Actual</th><th class="num">Target %</th><th class="num">Drift</th></tr></thead>
+    <tbody>
+      {% set shown = allocation|map(attribute='asset_class')|list %}
+      {% for row in allocation %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td class="num">{{ row.value_cents|money }}</td>
+        <td class="num">{{ row.share|percent(1) }}</td>
+        <td class="num"><input form="targets" name="target-{{ row.asset_class }}" value="{{ row.target|percent_input }}" inputmode="decimal" class="amount narrow" aria-label="{{ row.label }} target"></td>
+        <td class="num {{ 'bad' if row.drift is not none and (row.drift > 0.05 or row.drift < -0.05) }}">{{ row.drift|percent(1) if row.drift is not none else '–' }}</td>
+      </tr>
+      {% endfor %}
+      {% for key, label in asset_classes.items() if key not in shown %}
+      <tr class="muted">
+        <td>{{ label }}</td><td class="num">–</td><td class="num">–</td>
+        <td class="num"><input form="targets" name="target-{{ key }}" inputmode="decimal" class="amount narrow" aria-label="{{ label }} target"></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="form-actions">
+    <button type="submit" form="targets">Save targets</button>
+    <span class="hint">Targets must total 100%. Drift over 5 points is highlighted. Leave all blank for no targets.</span>
+  </div>
+</section>
+{% endblock %}

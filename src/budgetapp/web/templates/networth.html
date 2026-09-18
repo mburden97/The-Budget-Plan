@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Net worth · Budget{% endblock %}
+{% block content %}
+{% if stale %}
+<div class="flash flash-warn" role="status">
+  Time for a check-in: {{ stale|length }} account{{ 's' if stale|length != 1 }} not updated in
+  {{ reminder_days }}+ days ({{ stale|map(attribute='name')|join(', ') }}).
+</div>
+{% endif %}
+
+<section class="summary">
+  <div class="stat"><span class="label">Net worth</span><span class="value">{{ current.net_cents|money }}</span></div>
+  <div class="stat {{ 'good' if change_cents > 0 else ('bad' if change_cents < 0 else '') }}">
+    <span class="label">Change, last 30 days</span><span class="value">{{ change_cents|money }}</span>
+  </div>
+  <div class="stat"><span class="label">Assets</span><span class="value">{{ current.assets_cents|money }}</span></div>
+  <div class="stat"><span class="label">Liabilities</span><span class="value">{{ current.liabilities_cents|money }}</span></div>
+</section>
+
+<section class="panel">
+  <h2>History</h2>
+  {% if chart %}{{ chart }}{% else %}
+  <p class="muted">Record balances in at least two different months to see a trend.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <h2>Balance check-in</h2>
+    {% if archived_count %}
+    <a class="push-right small" href="{{ url_for('networth.index', archived=none if show_archived else '1') }}">
+      {{ 'Hide archived' if show_archived else 'Show archived (' ~ archived_count ~ ')' }}</a>
+    {% endif %}
+  </header>
+  <form method="post" action="{{ url_for('networth.checkin') }}">
+    {{ csrf_field() }}
+    <div class="table-wrap">
+    <table class="items">
+      <thead>
+        <tr><th>Account</th><th>Type</th><th class="num">Last balance</th><th>As of</th><th class="num">New balance</th></tr>
+      </thead>
+      {% for section, rows in [('Assets', assets), ('Liabilities (amount owed)', liabilities)] %}
+      <tbody>
+        <tr class="section-row"><th colspan="5">{{ section }}</th></tr>
+        {% for a in rows %}
+        <tr>
+          <td><a href="{{ url_for('networth.account', account_id=a.id) }}">{{ a.name }}</a>{% if a.institution %} <span class="muted">· {{ a.institution }}</span>{% endif %}{% if a.emergency_fund %} <span class="badge">emergency fund</span>{% endif %}{% if a.apy %} <span class="badge">{{ a.apy|percent(1) }} APY</span>{% endif %}{% if a.archived %} <span class="badge">archived</span>{% endif %}</td>
+          <td class="muted">{{ a.type_label }}</td>
+          <td class="num">{{ a.balance_cents|money if a.balance_cents is not none else '–' }}</td>
+          <td class="muted">{{ a.balance_as_of or 'never' }}</td>
+          <td class="num">
+            {% if a.id in auto_ids %}<span class="muted">from holdings</span>
+            {% else %}<input name="balance-{{ a.id }}" inputmode="decimal" class="amount" placeholder="{{ a.balance_cents|money_input if a.balance_cents is not none else '0.00' }}" aria-label="New balance for {{ a.name }}">{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">None yet.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+    </table>
+    </div>
+    <div class="form-actions">
+      <label>As of <input type="date" name="as_of" value="{{ today }}" required></label>
+      <button type="submit">Save balances</button>
+      <span class="hint">Blank fields keep their last balance.</span>
+    </div>
+  </form>
+</section>
+
+<details class="adder">
+  <summary>Add an account</summary>
+  <div class="panel">
+  <form method="post" action="{{ url_for('networth.add_account') }}" class="grid-form">
+    {{ csrf_field() }}
+    <label>Name <input name="name" required maxlength="100"></label>
+    <label>Type
+      <select name="type">
+        {% for key, label in account_types.items() if key != 'loan' %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Institution <input name="institution" maxlength="100"></label>
+    <label>Current balance <input name="balance" inputmode="decimal" placeholder="optional"></label>
+    <button type="submit">Add account</button>
+  </form>
+  <p class="hint">Add loans on the <a href="{{ url_for('loans.index') }}">Loans</a> page so their payoff can be tracked.</p>
+  </div>
+</details>
+{% endblock %}
