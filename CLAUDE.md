@@ -22,7 +22,9 @@ vault file = Argon2id + AES-256-GCM). See README.md for layout and SECURITY.md f
 - Don't weaken the web guards in `web/__init__.py` (host allow-list, CSRF, origin check, CSP).
 - Every vault needs a passphrase: `ALLOW_BLANK_PASSPHRASE = False`. Don't turn it back on. A vault
   made in the old no-passphrase mode opens to `/set-passphrase`. Never type, ask for, store or
-  otherwise handle a user's passphrase.
+  otherwise handle a user's passphrase. The one exception is dev mode (`--dev` / `Dev.cmd`): a
+  separate `data-dev/` vault on port 8767 that opens without one, via `blank_allowed()`. Keep it
+  opt-in, keep it off `data/`, and don't make it the default.
 - Vault format 2 (`vault.py`): a random data key encrypts the database; the header holds it
   wrapped once per secret (passphrase slot, optional recovery-code slot). Format-1 files still
   open and are re-keyed. A recovery code is shown once, in the response that creates it: never

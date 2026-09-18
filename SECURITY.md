@@ -38,6 +38,10 @@ else loads, and no extra unprotected backup is written. Backups in `data/backups
 *before* that were saved without a passphrase, and anyone holding them can read them, so
 delete them once the passphrase is set.
 
+The one exception is dev mode (`--dev`, `Dev.cmd`), for working on the app itself: it runs on a
+separate `data-dev/` vault, on its own port, that opens without a passphrase. It never touches
+`data/`, and it isn't the default; don't keep real data in it.
+
 ## Recovery code
 
 Settings can create a **recovery code**: 160 random bits, shown once as 32 characters in

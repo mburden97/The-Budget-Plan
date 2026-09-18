@@ -33,7 +33,8 @@
     </nav>
     {% if no_passphrase %}
     <a class="lock-form badge warn-badge" href="{{ url_for('settings.index') }}"
-       title="The vault opens without a passphrase. Set one in Settings.">No passphrase</a>
+       title="{{ 'Dev mode: this data-dev vault has no passphrase. Use made-up data only.' if dev_mode
+               else 'The vault opens without a passphrase. Set one in Settings.' }}">{{ 'Dev mode' if dev_mode else 'No passphrase' }}</a>
     {% else %}
     <form method="post" action="{{ url_for('auth.lock') }}" class="lock-form">
       {{ csrf_field() }}

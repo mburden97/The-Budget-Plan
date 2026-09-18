@@ -78,6 +78,11 @@ once; **rules** (description contains X) win over bank categories.
 
 ## Development
 
+**Dev mode:** double-click `Dev.cmd` (or run `python -m budgetapp --dev`) to work on the app
+without a passphrase. It uses a separate `data-dev/` vault on port 8767, created with the
+starter budget lines on first run, and opens straight to the dashboard. That vault is not
+protected, so use made-up data only; your real vault in `data/` is untouched.
+
 ```bash
 python -m pytest          # tests
 python -m ruff check .    # lint

@@ -9,7 +9,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from budgetapp import planning, quotes
 from budgetapp import settings as prefs
-from budgetapp.web import ALLOW_BLANK_PASSPHRASE, current_store, forms
+from budgetapp.web import blank_allowed, current_store, forms
 from budgetapp.web.auth import MIN_PASSPHRASE, passphrase_problem
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
@@ -38,7 +38,7 @@ def index():
         providers=quotes.PROVIDER_KEYS,
         min_length=MIN_PASSPHRASE,
         has_passphrase=not current_store().passphrase_blank,
-        allow_blank=ALLOW_BLANK_PASSPHRASE,
+        allow_blank=blank_allowed(),
     )
 
 

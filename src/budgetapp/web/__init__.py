@@ -56,7 +56,7 @@ CSP = (
 )
 
 
-def create_app(store: Store, *, port: int) -> Flask:
+def create_app(store: Store, *, port: int, dev: bool = False) -> Flask:
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=secrets.token_bytes(32),  # per process: restarting invalidates sessions
@@ -69,6 +69,7 @@ def create_app(store: Store, *, port: int) -> Flask:
         MAX_CONTENT_LENGTH=docs.MAX_BYTES + 1024 * 1024,
     )
     app.extensions["budget_store"] = store
+    app.config["DEV_MODE"] = dev  # --dev: a passphrase-less vault is allowed (see blank_allowed)
 
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     allowed_origins = {f"http://{host}" for host in allowed_hosts}
@@ -89,7 +90,7 @@ def create_app(store: Store, *, port: int) -> Flask:
         if request.endpoint in PUBLIC_ENDPOINTS:
             return None
         unlocked = _session_is_unlocked(store)
-        if unlocked and store.passphrase_blank and not ALLOW_BLANK_PASSPHRASE:
+        if unlocked and store.passphrase_blank and not blank_allowed():
             return redirect(url_for("auth.set_passphrase"))
         if unlocked and store.needs_new_passphrase and request.endpoint not in RECOVERY_ENDPOINTS:
             return redirect(url_for("auth.recover_passphrase"))
@@ -136,6 +137,7 @@ def create_app(store: Store, *, port: int) -> Flask:
             "csrf_field": csrf_field,
             "unlocked": unlocked,
             "no_passphrase": unlocked and store.passphrase_blank,
+            "dev_mode": app.config["DEV_MODE"],
             # The user's own logo if they put one in static/ (git-ignored); else the drawn one.
             "brand_logo": (Path(app.static_folder) / "logo.png").is_file(),
         }
@@ -198,14 +200,20 @@ def locked_page(store: Store) -> str:
     """Where a request without an unlocked session goes."""
     if not store.exists:
         return "auth.setup"
-    if not ALLOW_BLANK_PASSPHRASE and store.opens_without_passphrase():
+    if not blank_allowed() and store.opens_without_passphrase():
         return "auth.set_passphrase"
     return "auth.unlock"
 
 
+def blank_allowed() -> bool:
+    """May a vault open without a passphrase? Never, except in dev mode (`--dev`), which runs
+    on its own data-dev vault for developing the app with made-up data."""
+    return ALLOW_BLANK_PASSPHRASE or bool(current_app.config.get("DEV_MODE"))
+
+
 def blank_unlock(store: Store) -> bool:
-    """Open a passphrase-less vault without prompting, while that mode is allowed."""
-    return ALLOW_BLANK_PASSPHRASE and store.unlock_blank()
+    """Open a passphrase-less vault without prompting, while that is allowed."""
+    return blank_allowed() and store.unlock_blank()
 
 
 def start_session(store: Store) -> None:

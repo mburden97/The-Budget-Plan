@@ -7,7 +7,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from budgetapp import planning
 from budgetapp.vault import BadPassphrase, BadRecoveryCode, NoRecoveryCode, VaultError
 from budgetapp.web import (
-    ALLOW_BLANK_PASSPHRASE,
+    blank_allowed,
     blank_unlock,
     current_store,
     forms,
@@ -24,7 +24,7 @@ def passphrase_problem(passphrase: str, confirm: str) -> str | None:
     """Why a new passphrase can't be used, or None. Blank is allowed while that mode is on."""
     if passphrase != confirm:
         return "Passphrases don't match."
-    if passphrase == "" and ALLOW_BLANK_PASSPHRASE:
+    if passphrase == "" and blank_allowed():
         return None
     if len(passphrase) < MIN_PASSPHRASE:
         return f"Use at least {MIN_PASSPHRASE} characters. A few random words works well."
@@ -36,7 +36,7 @@ def setup():
     if current_store().exists:
         return redirect(url_for("auth.unlock"))
     return render_template(
-        "setup.html", min_length=MIN_PASSPHRASE, allow_blank=ALLOW_BLANK_PASSPHRASE
+        "setup.html", min_length=MIN_PASSPHRASE, allow_blank=blank_allowed()
     )
 
 
