@@ -32,8 +32,6 @@ package() {
     cd "$startdir"
     python -m installer --destdir="$pkgdir" dist/*.whl
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-    install -Dm644 SECURITY.md "$pkgdir/usr/share/doc/$pkgname/SECURITY.md"
     install -Dm644 contrib/the-budget-plan.desktop \
         "$pkgdir/usr/share/applications/the-budget-plan.desktop"
 }

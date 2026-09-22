@@ -4,7 +4,7 @@
 #
 # Keeps a virtual environment in ${XDG_DATA_HOME:-~/.local/share}/thebudgetplan/venv,
 # reinstalls it whenever pyproject.toml changes, then starts the app. A file named DEV_MODE
-# next to this script starts dev mode (see README.md).
+# next to this script starts dev mode.
 set -eu
 
 CDPATH='' cd -- "$(dirname -- "$0")"
