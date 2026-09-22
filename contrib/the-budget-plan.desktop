@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=The Budget Plan
+GenericName=Budget tracker
+Comment=Local-only, encrypted budget, loan and net worth tracker
+Exec=budget
+Icon=accessories-calculator
+Terminal=true
+Categories=Office;Finance;
+Keywords=budget;finance;money;loans;net worth;

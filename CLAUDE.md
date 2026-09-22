@@ -67,7 +67,8 @@ vault file = Argon2id + AES-256-GCM). See README.md for layout and SECURITY.md f
   reports `pathspec ... did not match any file(s)` and commits only the subject line). For any
   message with quotes, use a Bash heredoc instead: `git commit -F - <<'MSG' ... MSG`.
 
-## Commands (on Windows, `Budget.cmd` keeps the venv in `%LOCALAPPDATA%\TheBudgetPlan\venv`)
+## Commands (`Budget.cmd` on Windows, `./budget.sh` on Linux/macOS, each with its own venv;
+## Arch can install the PKGBUILD instead, and CI runs the tests in an Arch container)
 - Tests: `python -m pytest`
 - Lint:  `python -m ruff check src tests`
 - Run:   `.\Budget.cmd` (or `python -m budgetapp --no-browser`)

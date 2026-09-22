@@ -12,7 +12,33 @@ from budgetapp import __version__
 
 PORT = 8766
 DEV_PORT = 8767
-DEV_DATA_DIR = Path("data-dev")
+APP_DIR = "TheBudgetPlan" if os.name == "nt" else "thebudgetplan"
+
+
+def user_data_dir() -> Path:
+    """Where an installed copy keeps its data: XDG on Linux, %APPDATA% on Windows."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / APP_DIR
+
+
+def default_data_dir(*, dev: bool = False) -> Path:
+    """The folder holding budget.vault and backups/.
+
+    A source checkout keeps its data beside the code, which is what the launchers use. An
+    installed `budget`, run from wherever, uses the user's data folder instead of dropping a
+    data/ folder in the current directory. $BUDGET_DATA_DIR overrides both, except in dev
+    mode, which always stays on its own data-dev folder.
+    """
+    name = "data-dev" if dev else "data"
+    env = os.environ.get("BUDGET_DATA_DIR")
+    if env and not dev:
+        return Path(env)
+    if Path("pyproject.toml").is_file() or Path(name).is_dir():
+        return Path(name)
+    return user_data_dir() / name
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,8 +53,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--data-dir",
         type=Path,
         default=None,
-        help="folder holding budget.vault and backups/ "
-        "(default: ./data or $BUDGET_DATA_DIR; ./data-dev with --dev)",
+        help="folder holding budget.vault and backups/ (default: ./data in a checkout or "
+        "$BUDGET_DATA_DIR, else your user data folder; data-dev with --dev)",
     )
     parser.add_argument(
         "--port", type=int, default=None,
@@ -48,8 +74,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.port is None:
         args.port = DEV_PORT if args.dev else PORT
     if args.data_dir is None:
-        default = Path(os.environ.get("BUDGET_DATA_DIR", "data"))
-        args.data_dir = DEV_DATA_DIR if args.dev else default
+        args.data_dir = default_data_dir(dev=args.dev)
     return args
 
 

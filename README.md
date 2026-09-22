@@ -30,7 +30,22 @@ Requires Python 3.12+ (`py --version`).
 `%LOCALAPPDATA%\TheBudgetPlan\venv` (outside OneDrive), reinstalls packages whenever
 `pyproject.toml` changes, and opens `http://127.0.0.1:8766`.
 
-**Manually / other OS:**
+**Linux / macOS:** run `./budget.sh`. It keeps a Python environment in
+`${XDG_DATA_HOME:-~/.local/share}/thebudgetplan/venv`, reinstalls packages whenever
+`pyproject.toml` changes, and opens `http://127.0.0.1:8766`.
+
+**Arch Linux:** install it as a package instead, straight from a clone:
+
+```bash
+makepkg -si          # uses the PKGBUILD in this folder; everything it needs is in extra/
+budget               # or start "The Budget Plan" from the applications menu
+```
+
+Its dependencies are all official Arch packages (`python-flask`, `python-waitress`,
+`python-cryptography`), so nothing comes from the AUR or pip. An installed copy keeps its
+vault in `${XDG_DATA_HOME:-~/.local/share}/thebudgetplan/data`, not in the current folder.
+
+**Any OS, by hand:**
 
 ```bash
 python -m venv .venv
@@ -45,7 +60,8 @@ Settings (print it and keep it offline): without one or the other the vault can'
 ## Where your data lives
 
 ```
-data/
+data/                 <- beside the code in a checkout; an installed copy uses
+                         ${XDG_DATA_HOME:-~/.local/share}/thebudgetplan (%APPDATA% on Windows)
   budget.vault        <- everything, encrypted. Back up / carry this one file.
   backups/            <- encrypted copy taken on each unlock (last 30 kept)
   documents/          <- uploaded documents, each encrypted under its own key. Back this up too

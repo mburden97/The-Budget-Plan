@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  arch:
+    name: Arch Linux
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      # Everything this needs is in Arch's own repos: no pip, no AUR.
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git python python-flask python-waitress \
+            python-cryptography python-pytest ruff
+      - uses: actions/checkout@v4
+      - name: Tests
+        run: PYTHONPATH=src python -m pytest
+      - name: Lint
+        run: ruff check src tests
+      - name: Build and install the package
+        run: |
+          pacman -S --noconfirm --needed base-devel python-build python-installer \
+            python-setuptools python-wheel
+          useradd -m builder && chown -R builder .
+          sudo -u builder makepkg --nocheck
+          pacman -U --noconfirm the-budget-plan-*.pkg.tar.zst
+          budget --version
