@@ -27,8 +27,9 @@ src/budgetapp/web/static/avatar.gif
 src/budgetapp/web/static/logo.png
 src/budgetapp/web/static/home-bg.*
 
-# Markdown notes: kept locally, not in the repo
+# Markdown notes are kept locally, except the front page
 *.md
+!README.md
 
 # Python
 __pycache__/
